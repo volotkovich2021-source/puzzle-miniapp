@@ -12,7 +12,7 @@
     --ok:#3ddc97;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text); overscroll-behavior:none;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
   body{min-height:100vh; display:flex; justify-content:center;}
   #app{width:100%; max-width:520px; padding:16px; padding-top:calc(16px + env(safe-area-inset-top));}
@@ -68,7 +68,7 @@
     padding:8px 12px; font-size:15px; cursor:pointer; font-weight:600;}
 
   .board-wrap{position:relative; width:100%; aspect-ratio:1/1; border-radius:14px; overflow:hidden;
-    background:var(--card);}
+    background:var(--card); touch-action:none;}
   #peekImg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
   #board{position:relative; z-index:1; width:100%; height:100%; display:grid; gap:2px;
     background:var(--line); transition:opacity .12s;}
@@ -279,6 +279,17 @@
     document.addEventListener(ev, audioUnlock, {passive:true});
   });
 
+  // пока тащим кусочек — гасим любые движения страницы
+  function lockScroll(on){
+    try {
+      document.documentElement.style.overflow = on ? 'hidden' : '';
+      document.body.style.overflow = on ? 'hidden' : '';
+    } catch(e){}
+  }
+  document.addEventListener('touchmove', function(e){
+    if (dragEl) e.preventDefault();
+  }, {passive:false});
+
   // короткий тон с плавным затуханием — файлы не нужны
   function tone(freq, start, dur, vol, type){
     if (!soundOn || !actx) return;
@@ -474,7 +485,15 @@
   function show(name){
     $('setup').classList.toggle('active', name === 'setup');
     $('game').classList.toggle('active', name === 'game');
+    // в игре свайп вниз не должен сворачивать приложение
+    if (tg && tg.disableVerticalSwipes && tg.enableVerticalSwipes){
+      try {
+        if (name === 'game') tg.disableVerticalSwipes();
+        else tg.enableVerticalSwipes();
+      } catch(e){}
+    }
     if (name === 'setup'){
+      lockScroll(false);
       $('puzzleBoard').classList.remove('on');
       $('tray').classList.remove('on');
       $('puzzleBoard').innerHTML = '';
@@ -621,7 +640,7 @@
 
   // ---------- подсказка (удержание) ----------
   function peek(on){
-    if (mode === 'puzzle'){ $('peekImg').style.opacity = on ? '0.62' : '0.16'; }
+    if (mode === 'puzzle'){ $('peekImg').style.opacity = on ? '0.9' : '0'; }
     else { $('board').style.opacity = on ? '0.22' : '1'; }
   }
   ['pointerdown','touchstart'].forEach(function(ev){
@@ -648,7 +667,7 @@
     $('board').style.display = 'none';
     $('puzzleBoard').classList.add('on');
     $('tray').classList.add('on');
-    $('peekImg').style.opacity = '0.16';
+    $('peekImg').style.opacity = '0';   // образец скрыт: собираем по кусочкам, а не по подсказке
 
     buildSlots();
     buildTray();
@@ -717,6 +736,7 @@
   function pieceDown(e){
     if (finished || dragEl) return;
     e.preventDefault();
+    lockScroll(true);
     audioUnlock();
     dragEl = this;
     dragHome = this.parentNode;
@@ -780,6 +800,7 @@
 
   function pieceUp(){
     if (!dragEl) return;
+    lockScroll(false);
     document.removeEventListener('pointermove', pieceMove);
     document.removeEventListener('pointerup', pieceUp);
     document.removeEventListener('pointercancel', pieceUp);
