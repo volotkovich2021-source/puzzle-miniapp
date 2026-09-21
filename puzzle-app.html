@@ -131,6 +131,9 @@
   .modes-title{color:var(--muted); font-size:13px; letter-spacing:.08em; text-transform:uppercase;
     text-align:center; margin:22px 0 10px; font-weight:700;}
   .modes{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .code-show{font-size:46px; letter-spacing:.16em; font-weight:800; text-align:center;
+    background:var(--card); border-radius:14px; padding:14px 0; margin:6px 0 12px;
+    font-variant-numeric:tabular-nums; color:#fff;}
   .mode-card{border:2px solid var(--line); background:var(--card); color:var(--text);
     border-radius:16px; padding:18px 10px 16px; min-height:150px; cursor:pointer;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
@@ -236,6 +239,34 @@
     </div>
 
     <button id="startBtn" class="primary big" disabled>Начать</button>
+    <button id="duetBtn" class="primary big" style="display:none">👥 Играть вдвоём</button>
+  </section>
+
+  <!-- Экран игры вдвоём -->
+  <section id="duet" class="screen">
+    <h1>👥 Игра вдвоём</h1>
+    <p class="sub">Собирайте одну картинку вместе</p>
+
+    <div id="duetStart">
+      <button id="createRoomBtn" class="primary big">Создать комнату</button>
+      <p class="status" id="createStatus"></p>
+
+      <p class="modes-title">Или войди по коду друга</p>
+      <input id="codeInput" type="text" inputmode="numeric" maxlength="4" placeholder="4 цифры"
+             autocomplete="off">
+      <button id="joinRoomBtn" class="primary">Войти в комнату</button>
+      <p class="status" id="joinStatus"></p>
+    </div>
+
+    <div id="duetWait" style="display:none">
+      <p class="modes-title">Код комнаты</p>
+      <div class="code-show" id="codeShow">----</div>
+      <button id="inviteBtn" class="primary">📨 Позвать друга</button>
+      <button id="copyCodeBtn" class="ghost">Скопировать код</button>
+      <p class="status" id="waitStatus">Ждём второго игрока…</p>
+    </div>
+
+    <button class="ghost" id="duetBackBtn">← Назад</button>
   </section>
 
   <!-- Экран игры -->
@@ -243,6 +274,7 @@
     <div class="hud">
       <span class="chip" id="timer">0:00</span>
       <span class="chip" id="moves">0 ходов</span>
+      <span class="chip" id="playersChip" style="display:none"></span>
       <span class="spacer"></span>
       <button id="peekBtn" title="Показать картинку">👁</button>
       <button id="soundBtn" title="Звук вкл/выкл">🔊</button>
@@ -395,6 +427,7 @@
       mode = b.dataset.mode;
       $('diffShuffle').style.display = (mode === 'shuffle') ? 'flex' : 'none';
       $('diffPuzzle').style.display = (mode === 'puzzle') ? 'flex' : 'none';
+      setDuetVisible();
       sfxPick();
     });
   });
@@ -484,15 +517,301 @@
   // ---------- запуск игры ----------
   $('startBtn').addEventListener('click', function(){
     if (!sourceURL) return;
+    net.on = false;
     $('peekImg').src = sourceURL;
     show('game');
     resetGame();
   });
 
-  $('backBtn').addEventListener('click', function(){
-    stopTimer();
+  // ---------- игра вдвоём: комнаты ----------
+  var net = { on: false, host: false, code: null, ws: null, sid: null,
+              count: 1, playing: false, lastState: null, applying: false,
+              edgesV: [], edgesH: [], order: [], placed: {} };
+
+  function setDuetVisible(){
+    $('duetBtn').style.display = (mode === 'puzzle') ? 'block' : 'none';
+  }
+
+  function paintPlayers(){
+    var el = $('playersChip');
+    if (!el) return;
+    el.textContent = net.on ? ('👥 ' + net.count) : '';
+    el.style.display = net.on ? 'inline-block' : 'none';
+  }
+
+  function randomEdges(rows, cols){
+    var ev = [], eh = [], r, c;
+    for (r = 0; r < rows; r++){
+      ev[r] = []; eh[r] = [];
+      for (c = 0; c < cols; c++){ ev[r][c] = 0; eh[r][c] = 0; }
+    }
+    for (r = 0; r < rows; r++)
+      for (c = 0; c < cols - 1; c++) ev[r][c] = (Math.random() < 0.5) ? 1 : -1;
+    for (r = 0; r < rows - 1; r++)
+      for (c = 0; c < cols; c++) eh[r][c] = (Math.random() < 0.5) ? 1 : -1;
+    return {ev: ev, eh: eh};
+  }
+
+  function shuffledOrder(n){
+    var a = [], i, j, t;
+    for (i = 0; i < n; i++) a.push(i);
+    for (i = a.length - 1; i > 0; i--){
+      j = Math.floor(Math.random() * (i + 1));
+      t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  $('duetBtn').addEventListener('click', function(){
+    $('duetStart').style.display = 'block';
+    $('duetWait').style.display = 'none';
+    $('createRoomBtn').disabled = !sourceURL;
+    $('createStatus').textContent = sourceURL ? '' : 'Сначала выбери картинку';
+    $('joinStatus').textContent = '';
+    $('codeInput').value = '';
+    show('duet');
+  });
+
+  $('duetBackBtn').addEventListener('click', function(){
+    leaveRoom();
     show('setup');
   });
+
+  $('createRoomBtn').addEventListener('click', function(){
+    if (!sourceURL) return;
+    var lay = layoutFor(psize);
+    var rows = lay.rows, cols = lay.cols;
+    var e = randomEdges(rows, cols);
+    $('createRoomBtn').disabled = true;
+    $('createStatus').textContent = 'Создаю комнату…';
+    fetch('/api/room/create', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image: sourceURL, psize: psize, pcols: cols, prows: rows,
+                            edges_v: e.ev, edges_h: e.eh, order: shuffledOrder(rows * cols)})
+    }).then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(data){
+      $('createRoomBtn').disabled = false;
+      $('createStatus').textContent = '';
+      $('duetStart').style.display = 'none';
+      $('duetWait').style.display = 'block';
+      $('codeShow').textContent = data.code;
+      openRoom(data.code, true);
+    }).catch(function(){
+      $('createRoomBtn').disabled = false;
+      $('createStatus').textContent = 'Не получилось создать комнату. Попробуй ещё раз.';
+    });
+  });
+
+  function joinRoom(code){
+    $('joinStatus').textContent = 'Ищу комнату…';
+    fetch('/api/room/join', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code: code})
+    }).then(function(r){
+      if (r.status === 404) throw new Error('notfound');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(data){
+      $('joinStatus').textContent = '';
+      sourceURL = data.image;
+      $('duetStart').style.display = 'none';
+      $('duetWait').style.display = 'block';
+      $('codeShow').textContent = code;
+      $('waitStatus').textContent = 'Вхожу в комнату…';
+      openRoom(code, false, data.state);
+    }).catch(function(err){
+      $('joinStatus').textContent = (err.message === 'notfound')
+        ? 'Такой комнаты нет — проверь код'
+        : 'Не получилось войти. Попробуй ещё раз.';
+    });
+  }
+
+  $('joinRoomBtn').addEventListener('click', function(){
+    var code = ($('codeInput').value || '').replace(/\D/g, '').slice(0, 4);
+    if (code.length !== 4){ $('joinStatus').textContent = 'Введи 4 цифры кода'; return; }
+    joinRoom(code);
+  });
+
+  function openRoom(code, host, state){
+    leaveRoom();
+    net.on = true; net.host = !!host; net.code = code;
+    net.count = 1; net.playing = false; net.lastState = state || null;
+    $('waitStatus').textContent = host ? 'Ждём второго игрока…' : 'Вхожу…';
+    var proto = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+    try {
+      net.ws = new WebSocket(proto + location.host + '/ws/room/' + code);
+    } catch (e){ net.ws = null; }
+    if (!net.ws){
+      $('waitStatus').textContent = 'Не удалось подключиться. Обнови страницу.';
+      return;
+    }
+    net.ws.onmessage = function(ev){
+      var m;
+      try { m = JSON.parse(ev.data); } catch (e){ return; }
+      if (m.type === 'hello'){
+        net.sid = m.sid; net.count = m.count; net.lastState = m.state;
+        paintPlayers(); maybeStart(null);
+      } else if (m.type === 'count'){
+        net.count = m.count; paintPlayers(); maybeStart(null);
+      } else if (m.type === 'move'){
+        if (m.sid !== net.sid) applyRemote(m.idx, m.slot);
+      } else if (m.type === 'reset'){
+        if (m.sid !== net.sid){
+          $('win').classList.remove('show');
+          net.placed = {};
+          buildNetPuzzle();
+        }
+      } else if (m.type === 'full'){
+        $('waitStatus').textContent = 'В комнате уже максимум игроков';
+        leaveRoom();
+      }
+    };
+  }
+
+  function maybeStart(state){
+    if (!net.on || net.playing) return;
+    if (net.count < 2) return;
+    var st = state || net.lastState;
+    if (!st) return;
+    net.playing = true;
+    enterNetGame(st);
+  }
+
+  function enterNetGame(state){
+    psize = state.psize;
+    prows = state.prows; pcols = state.pcols;
+    net.edgesV = state.edges_v; net.edgesH = state.edges_h;
+    net.order = state.order; net.placed = state.placed || {};
+    $('peekImg').src = sourceURL;
+    show('game');
+    buildNetPuzzle();
+  }
+
+  function buildNetPuzzle(){
+    moves = 0; sel = -1; elapsed = 0; finished = false;
+    $('win').classList.remove('show');
+    ptotal = psize;
+    edgesV = net.edgesV; edgesH = net.edgesH;
+    $('board').style.display = 'none';
+    $('puzzleBoard').classList.add('on');
+    $('tray').classList.add('on');
+    $('peekImg').style.opacity = '0';
+    buildSlots();
+    updateHud();
+    paintPlayers();
+    audioUnlock();
+    pieceURLs = [];
+    $('tray').innerHTML = '';
+    var im = new Image();
+    im.onload = function(){
+      srcImg = im;
+      pieceURLs = [];
+      for (var i = 0; i < ptotal; i++){
+        pieceURLs.push(pieceImage(Math.floor(i / pcols), i % pcols));
+      }
+      var size = trayPieceSize(), k, idx;
+      for (k in net.placed){
+        idx = parseInt(k, 10);
+        putInSlot(makePiece(idx, size), slotEls[net.placed[k]]);
+      }
+      for (var j = 0; j < net.order.length; j++){
+        idx = net.order[j];
+        if (String(idx) in net.placed) continue;
+        $('tray').appendChild(makePiece(idx, size));
+      }
+      startTimer();
+    };
+    im.onerror = function(){ startTimer(); };
+    im.src = sourceURL;
+  }
+
+  function putInSlot(el, slot){
+    if (!el || !slot) return;
+    el.classList.remove('drag');
+    el.style.left = ''; el.style.top = '';
+    el.style.width = ''; el.style.height = '';
+    slot.appendChild(el);
+    slot.classList.add('done');
+  }
+
+  function netSend(msg){
+    if (!net.on || !net.ws || net.ws.readyState !== 1) return;
+    try { net.ws.send(JSON.stringify(msg)); } catch (e){}
+  }
+
+  function applyRemote(idx, slot){
+    net.applying = true;
+    var list = document.querySelectorAll('.piece'), el = null, i;
+    for (i = 0; i < list.length; i++){
+      if (String(list[i].dataset.idx) === String(idx)){ el = list[i]; break; }
+    }
+    if (el){
+      if (slot < 0) sendBack(el);
+      else putInSlot(el, slotEls[slot]);
+    }
+    net.applying = false;
+    updateHud();
+    if (correctCount() >= ptotal) win();
+  }
+
+  function leaveRoom(){
+    if (net.ws){ try { net.ws.close(); } catch (e){} }
+    net.on = false; net.ws = null; net.sid = null; net.playing = false;
+    paintPlayers();
+  }
+
+  $('inviteBtn').addEventListener('click', function(){
+    var url = 'https://t.me/tekst_redaktor_bot/play?startapp=' + net.code;
+    var text = 'Собери со мной пазл! Код комнаты: ' + net.code;
+    if (tg && tg.openTelegramLink){
+      try {
+        tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(url)
+                            + '&text=' + encodeURIComponent(text));
+        return;
+      } catch (e){}
+    }
+    try {
+      navigator.clipboard.writeText(url);
+      $('waitStatus').textContent = 'Ссылка скопирована — отправь её другу';
+    } catch (e){}
+  });
+
+  $('copyCodeBtn').addEventListener('click', function(){
+    try {
+      navigator.clipboard.writeText(String(net.code));
+      $('waitStatus').textContent = 'Код скопирован';
+    } catch (e){}
+  });
+
+  $('backBtn').addEventListener('click', function(){
+    stopTimer();
+    leaveRoom();
+    show('setup');
+  });
+
+  // вход по ссылке-приглашению: ?startapp=1234
+  (function(){
+    try {
+      var sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+      if (!/^\d{4}$/.test(sp)) return;
+      mode = 'puzzle';
+      document.querySelectorAll('.mode-card').forEach(function(x){
+        x.classList.toggle('active', x.dataset.mode === 'puzzle');
+      });
+      $('diffShuffle').style.display = 'none';
+      $('diffPuzzle').style.display = 'flex';
+      $('duetStart').style.display = 'none';
+      $('duetWait').style.display = 'block';
+      $('codeShow').textContent = sp;
+      $('waitStatus').textContent = 'Вхожу в комнату…';
+      show('duet');
+      joinRoom(sp);
+    } catch (e){}
+  })();
 
   var soundBtnEl = $('soundBtn');
   function paintSound(){ soundBtnEl.textContent = soundOn ? '🔊' : '🔇'; }
@@ -505,20 +824,26 @@
   });
   paintSound();
 
-  $('resetBtn').addEventListener('click', resetGame);
+  $('resetBtn').addEventListener('click', function(){
+    if (net.on){ net.placed = {}; netSend({type: 'reset'}); buildNetPuzzle(); }
+    else resetGame();
+  });
   $('againBtn').addEventListener('click', function(){
     $('win').classList.remove('show');
-    resetGame();
+    if (net.on){ net.placed = {}; netSend({type: 'reset'}); buildNetPuzzle(); }
+    else resetGame();
   });
   $('otherBtn').addEventListener('click', function(){
     $('win').classList.remove('show');
     stopTimer();
+    leaveRoom();
     show('setup');
   });
 
   function show(name){
     $('setup').classList.toggle('active', name === 'setup');
     $('game').classList.toggle('active', name === 'game');
+    $('duet').classList.toggle('active', name === 'duet');
     // в игре свайп вниз не должен сворачивать приложение
     if (tg && tg.disableVerticalSwipes && tg.enableVerticalSwipes){
       try {
@@ -929,6 +1254,7 @@
     el.style.width = size + 'px';
     el.style.height = size + 'px';
     $('tray').appendChild(el);
+    if (net.on && !net.applying) netSend({type: 'move', idx: parseInt(el.dataset.idx, 10), slot: -1});
     sfxSwap(); buzz('swap');
   }
 
@@ -948,6 +1274,7 @@
     } else {
       sfxSwap(); buzz('swap');
     }
+    if (net.on && !net.applying) netSend({type: 'move', idx: idx, slot: parseInt(slot.dataset.slot, 10)});
     updateHud();
     if (correctCount() >= ptotal) win();
   }
