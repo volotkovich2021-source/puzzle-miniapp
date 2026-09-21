@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Пазл</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg:#17212b; --card:#1f2c3a; --card2:#243447; --line:#2e4055;
+    --text:#eaf1f8; --muted:#8fa3b8; --accent:#4aa3ff; --accent2:#2f8ce0;
+    --ok:#3ddc97;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  body{min-height:100vh; display:flex; justify-content:center;}
+  #app{width:100%; max-width:520px; padding:16px; padding-top:calc(16px + env(safe-area-inset-top));}
+  .screen{display:none;}
+  .screen.active{display:block;}
+
+  h1{font-size:28px; margin:8px 0 4px; text-align:center;}
+  .sub{color:var(--muted); text-align:center; margin:0 0 20px; font-size:14px;}
+
+  .tabs{display:flex; background:var(--card); border-radius:12px; padding:4px; margin-bottom:14px;}
+  .tab{flex:1; border:0; background:transparent; color:var(--muted); font-size:15px;
+    padding:10px; border-radius:9px; cursor:pointer; font-weight:600;}
+  .tab.active{background:var(--card2); color:var(--text);}
+
+  .pane{display:none;}
+  .pane.active{display:block;}
+
+  .drop{display:flex; align-items:center; justify-content:center; gap:10px;
+    min-height:110px; background:var(--card); border:2px dashed var(--line);
+    border-radius:14px; color:var(--muted); cursor:pointer; text-align:center; padding:16px;
+    font-size:15px;}
+  .drop.has{border-style:solid; border-color:var(--accent); color:var(--text);}
+  #previewWrap{display:none; margin-top:12px; text-align:center;}
+  #preview{max-width:100%; max-height:180px; border-radius:12px; display:block; margin:0 auto;}
+
+  input[type=text]{width:100%; padding:14px; border-radius:12px; border:1px solid var(--line);
+    background:var(--card); color:var(--text); font-size:15px; outline:none;}
+  input[type=text]:focus{border-color:var(--accent);}
+
+  button.primary{width:100%; margin-top:12px; padding:14px; border:0; border-radius:12px;
+    background:linear-gradient(180deg,var(--accent),var(--accent2)); color:#fff;
+    font-size:16px; font-weight:700; cursor:pointer;}
+  button.primary:disabled{opacity:.4; cursor:default;}
+  button.big{font-size:17px; padding:16px;}
+  button.ghost{width:100%; margin-top:10px; padding:12px; border:0; border-radius:12px;
+    background:transparent; color:var(--muted); font-size:15px; cursor:pointer;}
+
+  .status{color:var(--muted); font-size:13px; margin-top:8px; min-height:18px;}
+  .status.err{color:#ff8080;}
+
+  .diff{margin-top:20px; display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .diff span{color:var(--muted); font-size:14px;}
+  .diff-btns{display:flex; gap:8px;}
+  .diff-btn{border:1px solid var(--line); background:var(--card); color:var(--muted);
+    padding:9px 14px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;}
+  .diff-btn.active{border-color:var(--accent); color:var(--text); background:var(--card2);}
+
+  .hud{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .hud .chip{background:var(--card); border-radius:10px; padding:8px 12px; font-size:14px;
+    font-weight:600; font-variant-numeric:tabular-nums;}
+  .hud .spacer{flex:1;}
+  .hud button{border:0; background:var(--card); color:var(--text); border-radius:10px;
+    padding:8px 12px; font-size:15px; cursor:pointer; font-weight:600;}
+
+  .board-wrap{position:relative; width:100%; aspect-ratio:1/1; border-radius:14px; overflow:hidden;
+    background:var(--card);}
+  #peekImg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
+  #board{position:relative; z-index:1; width:100%; height:100%; display:grid; gap:2px;
+    background:var(--line); transition:opacity .12s;}
+  .cell{background-repeat:no-repeat; cursor:pointer;
+    outline:3px solid transparent; outline-offset:-3px;}
+  .cell.sel{outline-color:var(--accent);}
+  .cell.done{outline:1px solid rgba(61,220,151,.35); outline-offset:-1px;}
+
+  .overlay{position:fixed; inset:0; background:rgba(10,16,24,.86); display:none;
+    align-items:center; justify-content:center; z-index:50; padding:20px;}
+  .overlay.show{display:flex;}
+  .win-card{background:var(--card); border-radius:18px; padding:26px 22px; width:100%;
+    max-width:340px; text-align:center;}
+  .win-emoji{font-size:48px;}
+  .win-card h2{margin:6px 0; font-size:24px;}
+  .win-card p{color:var(--muted); margin:0 0 6px; font-size:15px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Экран выбора -->
+  <section id="setup" class="screen active">
+    <h1>🧩 Пазл</h1>
+    <p class="sub">Своё фото или картинка по запросу</p>
+
+    <div class="tabs">
+      <button class="tab active" data-src="photo">Своё фото</button>
+      <button class="tab" data-src="gen">Сгенерировать</button>
+    </div>
+
+    <div id="panePhoto" class="pane active">
+      <label class="drop" id="drop" for="fileInput">
+        <span id="dropText">📷 Нажми, чтобы выбрать фото</span>
+        <input id="fileInput" type="file" accept="image/*" hidden>
+      </label>
+    </div>
+
+    <div id="paneGen" class="pane">
+      <input id="prompt" type="text" placeholder="напр.: кот в космосе, аниме" maxlength="300"
+             autocomplete="off" autocapitalize="sentences">
+      <button id="genBtn" class="primary">Сгенерировать картинку</button>
+      <div id="genStatus" class="status"></div>
+    </div>
+
+    <div id="previewWrap">
+      <img id="preview" alt="выбранная картинка">
+    </div>
+
+    <div class="diff">
+      <span>Сложность</span>
+      <div class="diff-btns">
+        <button class="diff-btn active" data-n="3">3×3</button>
+        <button class="diff-btn" data-n="4">4×4</button>
+        <button class="diff-btn" data-n="5">5×5</button>
+      </div>
+    </div>
+
+    <button id="startBtn" class="primary big" disabled>Начать</button>
+  </section>
+
+  <!-- Экран игры -->
+  <section id="game" class="screen">
+    <div class="hud">
+      <span class="chip" id="timer">0:00</span>
+      <span class="chip" id="moves">0 ходов</span>
+      <span class="spacer"></span>
+      <button id="peekBtn" title="Показать картинку">👁</button>
+      <button id="resetBtn" title="Перемешать заново">↺</button>
+    </div>
+    <div class="board-wrap">
+      <img id="peekImg" alt="">
+      <div id="board"></div>
+    </div>
+    <button id="backBtn" class="ghost">← Другая картинка</button>
+  </section>
+
+</div>
+
+<!-- Победа -->
+<div id="win" class="overlay">
+  <div class="win-card">
+    <div class="win-emoji">🎉</div>
+    <h2>Собрано!</h2>
+    <p id="winStats"></p>
+    <button id="againBtn" class="primary big">Ещё раз</button>
+    <button id="otherBtn" class="ghost">Другая картинка</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  // ---------- состояние ----------
+  var n = 3;                 // размер сетки
+  var sourceURL = null;      // квадратная картинка (dataURL или blob)
+  var tiles = [];            // tiles[позиция] = индекс фрагмента
+  var sel = -1;              // выбранная клетка
+  var moves = 0;
+  var elapsed = 0, timerId = null, finished = false;
+
+  // ---------- выбор источника ----------
+  document.querySelectorAll('.tab').forEach(function(t){
+    t.addEventListener('click', function(){
+      document.querySelectorAll('.tab').forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      var gen = t.dataset.src === 'gen';
+      $('panePhoto').classList.toggle('active', !gen);
+      $('paneGen').classList.toggle('active', gen);
+      setStatus('');
+    });
+  });
+
+  document.querySelectorAll('.diff-btn').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('.diff-btn').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      n = parseInt(b.dataset.n, 10);
+    });
+  });
+
+  function setStatus(text, err){
+    var st = $('genStatus');
+    st.textContent = text || '';
+    st.className = 'status' + (err ? ' err' : '');
+  }
+
+  // ---------- загрузка своего фото ----------
+  $('fileInput').addEventListener('change', function(e){
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){ acceptImage(reader.result, 'Фото выбрано'); };
+    reader.readAsDataURL(f);
+  });
+
+  // ---------- генерация по тексту ----------
+  $('genBtn').addEventListener('click', function(){
+    var prompt = $('prompt').value.trim();
+    if (!prompt){ setStatus('Напиши, что нарисовать', true); return; }
+    $('genBtn').disabled = true;
+    setStatus('Рисую… бесплатный генератор отвечает примерно раз в 15 секунд');
+    fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({prompt: prompt})
+    }).then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.blob();
+    }).then(function(blob){
+      acceptImage(URL.createObjectURL(blob), 'Картинка готова');
+    }).catch(function(){
+      setStatus('Не получилось сгенерировать. Попробуй ещё раз или загрузи фото.', true);
+    }).then(function(){
+      $('genBtn').disabled = false;
+    });
+  });
+
+  // ---------- приём картинки от любого источника ----------
+  function acceptImage(url, note){
+    var img = new Image();
+    img.onload = function(){
+      try {
+        sourceURL = squareDataURL(img, 900);
+      } catch(e){
+        sourceURL = url; // на всякий случай: без обрезки
+      }
+      $('preview').src = sourceURL;
+      $('previewWrap').style.display = 'block';
+      $('drop').classList.add('has');
+      $('dropText').textContent = '📷 Другое фото';
+      $('startBtn').disabled = false;
+      setStatus(note || 'Готово');
+    };
+    img.onerror = function(){ setStatus('Картинку не удалось прочитать', true); };
+    img.src = url;
+  }
+
+  // обрезаем по центру в квадрат, чтобы фрагменты были ровными
+  function squareDataURL(img, size){
+    var c = document.createElement('canvas');
+    c.width = c.height = size;
+    var ctx = c.getContext('2d');
+    var side = Math.min(img.naturalWidth, img.naturalHeight) || size;
+    var sx = (img.naturalWidth - side) / 2;
+    var sy = (img.naturalHeight - side) / 2;
+    ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+    return c.toDataURL('image/jpeg', 0.9);
+  }
+  // ---------- запуск игры ----------
+  $('startBtn').addEventListener('click', function(){
+    if (!sourceURL) return;
+    $('peekImg').src = sourceURL;
+    show('game');
+    resetGame();
+  });
+
+  $('backBtn').addEventListener('click', function(){
+    stopTimer();
+    show('setup');
+  });
+
+  $('resetBtn').addEventListener('click', resetGame);
+  $('againBtn').addEventListener('click', function(){
+    $('win').classList.remove('show');
+    resetGame();
+  });
+  $('otherBtn').addEventListener('click', function(){
+    $('win').classList.remove('show');
+    stopTimer();
+    show('setup');
+  });
+
+  function show(name){
+    $('setup').classList.toggle('active', name === 'setup');
+    $('game').classList.toggle('active', name === 'game');
+    if (tg && tg.BackButton) {
+      try { name === 'game' ? tg.BackButton.show() : tg.BackButton.hide(); } catch(e){}
+    }
+  }
+  if (tg && tg.BackButton) {
+    tg.BackButton.onClick(function(){ stopTimer(); show('setup'); });
+  }
+
+  function resetGame(){
+    moves = 0; sel = -1; elapsed = 0; finished = false;
+    $('win').classList.remove('show');
+    tiles = shuffleTiles(n);
+    render();
+    updateHud();
+    startTimer();
+  }
+
+  function shuffleTiles(nn){
+    var total = nn * nn, arr = [], i;
+    for (i = 0; i < total; i++) arr.push(i);
+    do {
+      for (i = total - 1; i > 0; i--){
+        var j = Math.floor(Math.random() * (i + 1));
+        var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      }
+    } while (isSolved(arr));
+    return arr;
+  }
+
+  function isSolved(arr){
+    for (var i = 0; i < arr.length; i++) if (arr[i] !== i) return false;
+    return true;
+  }
+
+  // ---------- отрисовка ----------
+  function tilePositionStyle(tile){
+    var r = Math.floor(tile / n), c = tile % n;
+    var denom = (n > 1) ? (n - 1) : 1;
+    return (c / denom * 100) + '% ' + (r / denom * 100) + '%';
+  }
+
+  function render(){
+    var board = $('board');
+    board.style.gridTemplateColumns = 'repeat(' + n + ', 1fr)';
+    board.innerHTML = '';
+    for (var pos = 0; pos < tiles.length; pos++){
+      var cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.style.backgroundImage = 'url(' + sourceURL + ')';
+      cell.style.backgroundSize = (n * 100) + '% ' + (n * 100) + '%';
+      cell.style.backgroundPosition = tilePositionStyle(tiles[pos]);
+      if (tiles[pos] === pos) cell.classList.add('done');
+      if (pos === sel) cell.classList.add('sel');
+      cell.dataset.pos = pos;
+      cell.addEventListener('click', onCellClick);
+      board.appendChild(cell);
+    }
+  }
+
+  function onCellClick(){
+    if (finished) return;
+    var pos = parseInt(this.dataset.pos, 10);
+    if (sel === -1){ sel = pos; render(); return; }
+    if (sel === pos){ sel = -1; render(); return; }
+    var t = tiles[sel]; tiles[sel] = tiles[pos]; tiles[pos] = t;
+    sel = -1; moves++;
+    updateHud();
+    render();
+    if (isSolved(tiles)) win();
+  }
+
+  // ---------- таймер и счётчики ----------
+  function startTimer(){
+    stopTimer();
+    timerId = setInterval(function(){
+      elapsed++;
+      $('timer').textContent = fmtTime(elapsed);
+    }, 1000);
+  }
+  function stopTimer(){ if (timerId){ clearInterval(timerId); timerId = null; } }
+
+  function fmtTime(s){
+    var m = Math.floor(s / 60), ss = s % 60;
+    return m + ':' + (ss < 10 ? '0' : '') + ss;
+  }
+  function plural(nn, one, few, many){
+    var m10 = nn % 10, m100 = nn % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
+  }
+  function updateHud(){
+    $('moves').textContent = moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    $('timer').textContent = fmtTime(elapsed);
+  }
+
+  // ---------- подсказка (удержание) ----------
+  function peek(on){ $('board').style.opacity = on ? '0.22' : '1'; }
+  ['pointerdown','touchstart'].forEach(function(ev){
+    $('peekBtn').addEventListener(ev, function(e){ if (e.cancelable) e.preventDefault(); peek(true); });
+  });
+  ['pointerup','pointerleave','pointercancel','touchend','touchcancel'].forEach(function(ev){
+    $('peekBtn').addEventListener(ev, function(){ peek(false); });
+  });
+
+  // ---------- победа ----------
+  function win(){
+    finished = true;
+    stopTimer();
+    $('winStats').textContent =
+      'Время: ' + fmtTime(elapsed) + ' · ' + moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    $('win').classList.add('show');
+    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
+    if (tg && tg.BackButton) { try { tg.BackButton.hide(); } catch(e){} }
+  }
+})();
+</script>
+</body>
+</html>
