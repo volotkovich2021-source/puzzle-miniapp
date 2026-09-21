@@ -77,14 +77,89 @@
   .cell.sel{outline-color:var(--accent);}
   .cell.done{outline:1px solid rgba(61,220,151,.35); outline-offset:-1px;}
 
-  .overlay{position:fixed; inset:0; background:rgba(10,16,24,.86); display:none;
+  .overlay{position:fixed; inset:0; background:rgba(10,16,24,.86); display:flex; opacity:0; visibility:hidden; transition:opacity .25s ease, visibility .25s;
     align-items:center; justify-content:center; z-index:50; padding:20px;}
-  .overlay.show{display:flex;}
+  .overlay.show{opacity:1; visibility:visible;}
   .win-card{background:var(--card); border-radius:18px; padding:26px 22px; width:100%;
     max-width:340px; text-align:center;}
   .win-emoji{font-size:48px;}
   .win-card h2{margin:6px 0; font-size:24px;}
   .win-card p{color:var(--muted); margin:0 0 6px; font-size:15px;}
+
+  /* ---------- живость: анимации ---------- */
+  .cell{transition:transform .12s ease, outline-color .12s ease;}
+  .cell.sel{animation:selPulse .9s ease-in-out infinite;}
+  @keyframes selPulse{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(.93);}
+  }
+  .cell.appear{animation:appear .28s ease both;}
+  @keyframes appear{
+    from{opacity:0; transform:scale(.55);}
+    to{opacity:1; transform:scale(1);}
+  }
+  .cell.snap{animation:snap .45s ease;}
+  @keyframes snap{
+    0%{transform:scale(1); filter:brightness(1);}
+    35%{transform:scale(1.12); filter:brightness(1.4);}
+    100%{transform:scale(1); filter:brightness(1);}
+  }
+  .chip.bump{animation:bump .3s ease;}
+  @keyframes bump{
+    0%{transform:scale(1);}
+    40%{transform:scale(1.15);}
+    100%{transform:scale(1);}
+  }
+  .overlay.show .win-card{animation:cardIn .45s cubic-bezier(.2,1.4,.5,1) both;}
+  @keyframes cardIn{
+    from{opacity:0; transform:scale(.8) translateY(16px);}
+    to{opacity:1; transform:scale(1) translateY(0);}
+  }
+  #win.show .win-emoji{animation:emojiPop .7s ease;}
+  @keyframes emojiPop{
+    0%{transform:scale(.3) rotate(-25deg);}
+    60%{transform:scale(1.25) rotate(10deg);}
+    100%{transform:scale(1) rotate(0);}
+  }
+  .confetti{position:fixed; top:-40px; font-size:22px; pointer-events:none; z-index:60;
+    animation:fall linear forwards;}
+  @keyframes fall{
+    to{transform:translateY(115vh) rotate(360deg); opacity:.15;}
+  }
+
+  /* ---------- режим «Пазл» ---------- */
+  .mode{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:20px;}
+  .mode span{color:var(--muted); font-size:14px;}
+  .mode-btns{display:flex; gap:8px;}
+  .mode-btn{border:1px solid var(--line); background:var(--card); color:var(--muted);
+    padding:9px 14px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;}
+  .mode-btn.active{border-color:var(--accent); color:var(--text); background:var(--card2);}
+
+  #puzzleBoard{position:absolute; inset:0; z-index:2; display:none; gap:2px;
+    background:transparent; touch-action:none;}
+  #puzzleBoard.on{display:grid;}
+  .slot{background-repeat:no-repeat; background-color:rgba(255,255,255,.06); border-radius:3px;
+    outline:1px dashed rgba(255,255,255,.10); outline-offset:-1px; position:relative;}
+  .slot.done{outline-color:transparent; outline-style:none;}
+  .slot.hot{outline:2px solid var(--accent); outline-offset:-2px; outline-style:solid;}
+  .slot .piece{position:absolute; inset:0; width:100%; height:100%;
+    box-shadow:none; border-radius:3px; cursor:default;}
+
+  .tray{display:none; flex-wrap:wrap; gap:6px; margin-top:12px; min-height:84px;
+    background:var(--card); border-radius:12px; padding:8px; touch-action:none;}
+  .tray.on{display:flex;}
+  .tray:empty::after{content:'кусочки разложены'; color:var(--muted); font-size:13px;
+    margin:auto;}
+  .piece{background-repeat:no-repeat; border-radius:4px; cursor:grab; touch-action:none;
+    box-shadow:0 2px 6px rgba(0,0,0,.35); will-change:left,top;}
+  .piece.drag{position:fixed; z-index:70; cursor:grabbing; transform:scale(1.08);
+    box-shadow:0 12px 26px rgba(0,0,0,.55); pointer-events:none;}
+  .piece.back{transition:left .16s ease, top .16s ease;}
+  @keyframes popin{
+    from{opacity:0; transform:scale(.7);}
+    to{opacity:1; transform:scale(1);}
+  }
+  .tray .piece{animation:popin .22s ease both;}
 </style>
 </head>
 <body>
@@ -118,12 +193,29 @@
       <img id="preview" alt="выбранная картинка">
     </div>
 
-    <div class="diff">
+    <div class="mode">
+      <span>Игра</span>
+      <div class="mode-btns">
+        <button class="mode-btn active" data-mode="shuffle">Пятнашки</button>
+        <button class="mode-btn" data-mode="puzzle">Пазл</button>
+      </div>
+    </div>
+
+    <div class="diff" id="diffShuffle">
       <span>Сложность</span>
       <div class="diff-btns">
         <button class="diff-btn active" data-n="3">3×3</button>
         <button class="diff-btn" data-n="4">4×4</button>
         <button class="diff-btn" data-n="5">5×5</button>
+      </div>
+    </div>
+
+    <div class="diff" id="diffPuzzle" style="display:none">
+      <span>Кусочков</span>
+      <div class="diff-btns">
+        <button class="diff-btn active" data-p="12">12</button>
+        <button class="diff-btn" data-p="24">24</button>
+        <button class="diff-btn" data-p="48">48</button>
       </div>
     </div>
 
@@ -137,12 +229,15 @@
       <span class="chip" id="moves">0 ходов</span>
       <span class="spacer"></span>
       <button id="peekBtn" title="Показать картинку">👁</button>
+      <button id="soundBtn" title="Звук вкл/выкл">🔊</button>
       <button id="resetBtn" title="Перемешать заново">↺</button>
     </div>
     <div class="board-wrap">
       <img id="peekImg" alt="">
       <div id="board"></div>
+      <div id="puzzleBoard"></div>
     </div>
+    <div id="tray" class="tray"></div>
     <button id="backBtn" class="ghost">← Другая картинка</button>
   </section>
 
@@ -167,6 +262,62 @@
 
   var $ = function(id){ return document.getElementById(id); };
 
+  // ---------- звук и вибрация ----------
+  var soundOn = true;
+  try { soundOn = localStorage.getItem('puzzleSound') !== '0'; } catch(e){}
+  var actx = null;
+
+  // браузер включает звук только после первого касания — ждём его
+  function audioUnlock(){
+    if (!actx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) { try { actx = new AC(); } catch(e){ actx = null; } }
+    }
+    if (actx && actx.state === 'suspended') { try { actx.resume(); } catch(e){} }
+  }
+  ['pointerdown','touchstart','click'].forEach(function(ev){
+    document.addEventListener(ev, audioUnlock, {passive:true});
+  });
+
+  // короткий тон с плавным затуханием — файлы не нужны
+  function tone(freq, start, dur, vol, type){
+    if (!soundOn || !actx) return;
+    try {
+      var t0 = actx.currentTime + (start || 0);
+      var osc = actx.createOscillator();
+      var gain = actx.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(vol || 0.14, t0 + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + (dur || 0.12));
+      osc.connect(gain);
+      gain.connect(actx.destination);
+      osc.start(t0);
+      osc.stop(t0 + (dur || 0.12) + 0.03);
+    } catch(e){}
+  }
+
+  function sfxPick(){ tone(660, 0, 0.07, 0.09, 'triangle'); }
+  function sfxSwap(){ tone(420, 0, 0.09, 0.12, 'square'); tone(560, 0.05, 0.09, 0.09, 'triangle'); }
+  function sfxSnap(){ tone(880, 0, 0.13, 0.13, 'sine'); tone(1320, 0.06, 0.16, 0.08, 'sine'); }
+  function sfxShuffle(){ tone(320, 0, 0.09, 0.09, 'triangle'); tone(250, 0.07, 0.10, 0.07, 'triangle'); }
+  function sfxWin(){
+    var notes = [523, 659, 784, 1047];
+    for (var i = 0; i < notes.length; i++) tone(notes[i], i * 0.13, 0.3, 0.15, 'sine');
+    tone(1568, 0.55, 0.5, 0.09, 'sine');
+  }
+
+  function buzz(kind){
+    if (!tg || !tg.HapticFeedback) return;
+    try {
+      if (kind === 'pick') tg.HapticFeedback.selectionChanged();
+      else if (kind === 'swap') tg.HapticFeedback.impactOccurred('light');
+      else if (kind === 'snap') tg.HapticFeedback.impactOccurred('medium');
+      else tg.HapticFeedback.notificationOccurred('success');
+    } catch(e){}
+  }
+
   // ---------- состояние ----------
   var n = 3;                 // размер сетки
   var sourceURL = null;      // квадратная картинка (dataURL или blob)
@@ -174,6 +325,15 @@
   var sel = -1;              // выбранная клетка
   var moves = 0;
   var elapsed = 0, timerId = null, finished = false;
+
+  // ---------- режим и сложность ----------
+  var mode = 'shuffle';      // 'shuffle' — пятнашки, 'puzzle' — сборка кусочков
+  var psize = 12;            // сколько кусочков выбрано
+  var prows = 3, pcols = 4;  // раскладка поля пазла
+  var ptotal = 12;           // кусочков на поле
+  var slotEls = [];
+  var dragEl = null, dragHome = null, hotSlot = null;
+  var dragX0 = 0, dragY0 = 0, dragL = 0, dragT = 0;
 
   // ---------- выбор источника ----------
   document.querySelectorAll('.tab').forEach(function(t){
@@ -189,9 +349,22 @@
 
   document.querySelectorAll('.diff-btn').forEach(function(b){
     b.addEventListener('click', function(){
-      document.querySelectorAll('.diff-btn').forEach(function(x){ x.classList.remove('active'); });
+      b.parentNode.querySelectorAll('.diff-btn').forEach(function(x){ x.classList.remove('active'); });
       b.classList.add('active');
-      n = parseInt(b.dataset.n, 10);
+      if (b.dataset.p) psize = parseInt(b.dataset.p, 10);
+      else n = parseInt(b.dataset.n, 10);
+    });
+  });
+
+  // выбор игры: пятнашки или пазл
+  document.querySelectorAll('.mode-btn').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('.mode-btn').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      mode = b.dataset.mode;
+      $('diffShuffle').style.display = (mode === 'shuffle') ? 'flex' : 'none';
+      $('diffPuzzle').style.display = (mode === 'puzzle') ? 'flex' : 'none';
+      sfxPick();
     });
   });
 
@@ -276,6 +449,17 @@
     show('setup');
   });
 
+  var soundBtnEl = $('soundBtn');
+  function paintSound(){ soundBtnEl.textContent = soundOn ? '🔊' : '🔇'; }
+  soundBtnEl.addEventListener('click', function(){
+    soundOn = !soundOn;
+    try { localStorage.setItem('puzzleSound', soundOn ? '1' : '0'); } catch(e){}
+    paintSound();
+    audioUnlock();
+    if (soundOn) sfxPick();
+  });
+  paintSound();
+
   $('resetBtn').addEventListener('click', resetGame);
   $('againBtn').addEventListener('click', function(){
     $('win').classList.remove('show');
@@ -290,6 +474,15 @@
   function show(name){
     $('setup').classList.toggle('active', name === 'setup');
     $('game').classList.toggle('active', name === 'game');
+    if (name === 'setup'){
+      $('puzzleBoard').classList.remove('on');
+      $('tray').classList.remove('on');
+      $('puzzleBoard').innerHTML = '';
+      $('tray').innerHTML = '';
+      slotEls = [];
+      $('board').style.display = 'grid';
+      $('peekImg').style.opacity = '1';
+    }
     if (tg && tg.BackButton) {
       try { name === 'game' ? tg.BackButton.show() : tg.BackButton.hide(); } catch(e){}
     }
@@ -299,9 +492,16 @@
   }
 
   function resetGame(){
+    if (mode === 'puzzle'){ resetPuzzle(); return; }
     moves = 0; sel = -1; elapsed = 0; finished = false;
     $('win').classList.remove('show');
+    $('board').style.display = 'grid';
+    $('puzzleBoard').classList.remove('on');
+    $('tray').classList.remove('on');
     tiles = shuffleTiles(n);
+    appearMode = true;
+    audioUnlock();
+    sfxShuffle();
     render();
     updateHud();
     startTimer();
@@ -331,7 +531,12 @@
     return (c / denom * 100) + '% ' + (r / denom * 100) + '%';
   }
 
+  var appearMode = false;  // новая раздача — клетки всплывают
+  var snapPos = -1;        // фрагмент, который только что встал на место
+
   function render(){
+    var fresh = appearMode, snapAt = snapPos;
+    appearMode = false; snapPos = -1;
     var board = $('board');
     board.style.gridTemplateColumns = 'repeat(' + n + ', 1fr)';
     board.innerHTML = '';
@@ -343,6 +548,11 @@
       cell.style.backgroundPosition = tilePositionStyle(tiles[pos]);
       if (tiles[pos] === pos) cell.classList.add('done');
       if (pos === sel) cell.classList.add('sel');
+      if (fresh){
+        cell.classList.add('appear');
+        cell.style.animationDelay = (pos * 18) + 'ms';
+      }
+      if (pos === snapAt) cell.classList.add('snap');
       cell.dataset.pos = pos;
       cell.addEventListener('click', onCellClick);
       board.appendChild(cell);
@@ -352,11 +562,17 @@
   function onCellClick(){
     if (finished) return;
     var pos = parseInt(this.dataset.pos, 10);
-    if (sel === -1){ sel = pos; render(); return; }
-    if (sel === pos){ sel = -1; render(); return; }
-    var t = tiles[sel]; tiles[sel] = tiles[pos]; tiles[pos] = t;
+    if (sel === -1){ sel = pos; sfxPick(); buzz('pick'); render(); return; }
+    if (sel === pos){ sel = -1; sfxPick(); buzz('pick'); render(); return; }
+    var a = sel, b = pos;
+    var wasDoneA = (tiles[a] === a), wasDoneB = (tiles[b] === b);
+    var t = tiles[a]; tiles[a] = tiles[b]; tiles[b] = t;
     sel = -1; moves++;
     updateHud();
+    bump($('moves'));
+    if (!wasDoneA && tiles[a] === a) snapPos = a;
+    else if (!wasDoneB && tiles[b] === b) snapPos = b;
+    if (snapPos >= 0){ sfxSnap(); buzz('snap'); } else { sfxSwap(); buzz('swap'); }
     render();
     if (isSolved(tiles)) win();
   }
@@ -381,13 +597,33 @@
     if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
     return many;
   }
+  function bump(el){
+    el.classList.remove('bump');
+    void el.offsetWidth;   // перезапуск анимации
+    el.classList.add('bump');
+  }
+  function correctCount(){
+    var c = 0;
+    for (var i = 0; i < slotEls.length; i++){
+      var el = slotEls[i].firstChild;
+      if (el && parseInt(el.dataset.idx, 10) === i) c++;
+    }
+    return c;
+  }
   function updateHud(){
-    $('moves').textContent = moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    if (mode === 'puzzle'){
+      $('moves').textContent = correctCount() + ' из ' + ptotal;
+    } else {
+      $('moves').textContent = moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    }
     $('timer').textContent = fmtTime(elapsed);
   }
 
   // ---------- подсказка (удержание) ----------
-  function peek(on){ $('board').style.opacity = on ? '0.22' : '1'; }
+  function peek(on){
+    if (mode === 'puzzle'){ $('peekImg').style.opacity = on ? '0.62' : '0.16'; }
+    else { $('board').style.opacity = on ? '0.22' : '1'; }
+  }
   ['pointerdown','touchstart'].forEach(function(ev){
     $('peekBtn').addEventListener(ev, function(e){ if (e.cancelable) e.preventDefault(); peek(true); });
   });
@@ -395,14 +631,225 @@
     $('peekBtn').addEventListener(ev, function(){ peek(false); });
   });
 
+  // ---------- режим «Пазл»: кусочки перетаскиваются на поле ----------
+  function layoutFor(count){
+    if (count <= 12) return {rows:3, cols:4};
+    if (count <= 24) return {rows:4, cols:6};
+    return {rows:6, cols:8};
+  }
+
+  function resetPuzzle(){
+    moves = 0; sel = -1; elapsed = 0; finished = false;
+    $('win').classList.remove('show');
+    ptotal = psize;
+    var lay = layoutFor(ptotal);
+    prows = lay.rows; pcols = lay.cols;
+
+    $('board').style.display = 'none';
+    $('puzzleBoard').classList.add('on');
+    $('tray').classList.add('on');
+    $('peekImg').style.opacity = '0.16';
+
+    buildSlots();
+    buildTray();
+    updateHud();
+    audioUnlock();
+    sfxShuffle();
+    startTimer();
+  }
+
+  function buildSlots(){
+    var pb = $('puzzleBoard');
+    pb.style.gridTemplateColumns = 'repeat(' + pcols + ', 1fr)';
+    pb.style.gridTemplateRows = 'repeat(' + prows + ', 1fr)';
+    pb.innerHTML = '';
+    slotEls = [];
+    for (var i = 0; i < prows * pcols; i++){
+      var s = document.createElement('div');
+      s.className = 'slot';
+      s.dataset.slot = i;
+      pb.appendChild(s);
+      slotEls.push(s);
+    }
+  }
+
+  function trayPieceSize(){
+    var tray = $('tray');
+    var w = tray.clientWidth || 320;
+    var size = Math.floor((w - 16 - 6 * 5) / 5);
+    return Math.max(42, Math.min(64, size));
+  }
+
+  function piecePosition(idx){
+    var r = Math.floor(idx / pcols), c = idx % pcols;
+    var dx = (pcols > 1) ? (c / (pcols - 1) * 100) : 0;
+    var dy = (prows > 1) ? (r / (prows - 1) * 100) : 0;
+    return dx + '% ' + dy + '%';
+  }
+
+  function makePiece(idx, w){
+    var p = document.createElement('div');
+    p.className = 'piece';
+    p.dataset.idx = idx;
+    p.style.width = w + 'px';
+    p.style.height = w + 'px';
+    p.style.backgroundImage = 'url(' + sourceURL + ')';
+    p.style.backgroundSize = (pcols * 100) + '% ' + (prows * 100) + '%';
+    p.style.backgroundPosition = piecePosition(idx);
+    p.addEventListener('pointerdown', pieceDown);
+    return p;
+  }
+
+  function buildTray(){
+    var tray = $('tray');
+    tray.innerHTML = '';
+    var size = trayPieceSize();
+    var order = [], i, j, t;
+    for (i = 0; i < ptotal; i++) order.push(i);
+    for (i = order.length - 1; i > 0; i--){
+      j = Math.floor(Math.random() * (i + 1));
+      t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    for (i = 0; i < order.length; i++) tray.appendChild(makePiece(order[i], size));
+  }
+
+  // ---------- перетаскивание кусочков ----------
+  function pieceDown(e){
+    if (finished || dragEl) return;
+    e.preventDefault();
+    audioUnlock();
+    dragEl = this;
+    dragHome = this.parentNode;
+    var r = this.getBoundingClientRect();
+    dragL = r.left; dragT = r.top;
+    dragX0 = e.clientX; dragY0 = e.clientY;
+    if (dragHome && dragHome.classList && dragHome.classList.contains('slot')){
+      dragHome.classList.remove('done');
+    }
+    this.classList.add('drag');
+    this.style.width = r.width + 'px';
+    this.style.height = r.height + 'px';
+    this.style.left = dragL + 'px';
+    this.style.top = dragT + 'px';
+    document.body.appendChild(this);
+    highlightSlot();
+    sfxPick(); buzz('pick');
+    document.addEventListener('pointermove', pieceMove);
+    document.addEventListener('pointerup', pieceUp);
+    document.addEventListener('pointercancel', pieceUp);
+  }
+
+  function pieceMove(e){
+    if (!dragEl) return;
+    e.preventDefault();
+    dragL += e.clientX - dragX0;
+    dragT += e.clientY - dragY0;
+    dragX0 = e.clientX; dragY0 = e.clientY;
+    dragEl.style.left = dragL + 'px';
+    dragEl.style.top = dragT + 'px';
+    highlightSlot();
+  }
+
+  // ближайший свободный слот к центру кусочка (с допуском)
+  function nearestSlot(){
+    if (!dragEl) return null;
+    var r = dragEl.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var best = null, bestD = 1e9, i, b, dx, dy, d;
+    for (i = 0; i < slotEls.length; i++){
+      if (slotEls[i].classList.contains('done')) continue;
+      b = slotEls[i].getBoundingClientRect();
+      dx = (b.left + b.width / 2) - cx;
+      dy = (b.top + b.height / 2) - cy;
+      d = Math.sqrt(dx * dx + dy * dy);
+      if (d < bestD){ bestD = d; best = slotEls[i]; }
+    }
+    if (!best) return null;
+    b = best.getBoundingClientRect();
+    var near = Math.max(b.width, b.height) * 0.7;
+    return (bestD <= near) ? best : null;
+  }
+
+  function highlightSlot(){
+    var s = nearestSlot();
+    if (s === hotSlot) return;
+    if (hotSlot) hotSlot.classList.remove('hot');
+    hotSlot = s;
+    if (hotSlot) hotSlot.classList.add('hot');
+  }
+
+  function pieceUp(){
+    if (!dragEl) return;
+    document.removeEventListener('pointermove', pieceMove);
+    document.removeEventListener('pointerup', pieceUp);
+    document.removeEventListener('pointercancel', pieceUp);
+    var el = dragEl;
+    var target = nearestSlot();
+    if (hotSlot){ hotSlot.classList.remove('hot'); hotSlot = null; }
+    dragEl = null;
+    if (target) placePiece(el, target);
+    else sendBack(el);
+  }
+
+  function sendBack(el){
+    var size = trayPieceSize();
+    el.classList.remove('drag');
+    el.style.left = ''; el.style.top = '';
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    $('tray').appendChild(el);
+    sfxSwap(); buzz('swap');
+  }
+
+  function placePiece(el, slot){
+    var idx = parseInt(el.dataset.idx, 10);
+    var right = (String(slot.dataset.slot) === String(idx));
+    el.classList.remove('drag');
+    el.style.left = ''; el.style.top = '';
+    el.style.width = ''; el.style.height = '';
+    slot.appendChild(el);
+    slot.classList.add('done');
+    if (right){
+      sfxSnap(); buzz('snap');
+      el.classList.remove('snap');
+      void el.offsetWidth;
+      el.classList.add('snap');
+    } else {
+      sfxSwap(); buzz('swap');
+    }
+    updateHud();
+    if (correctCount() >= ptotal) win();
+  }
+
   // ---------- победа ----------
+  function confetti(){
+    var emo = ['🎉','✨','⭐','🎊','💫'];
+    for (var i = 0; i < 16; i++){
+      var s = document.createElement('div');
+      s.className = 'confetti';
+      s.textContent = emo[i % emo.length];
+      s.style.left = (Math.random() * 92) + '%';
+      s.style.animationDuration = (1.6 + Math.random() * 1.5) + 's';
+      s.style.animationDelay = (Math.random() * 0.6) + 's';
+      s.style.fontSize = (16 + Math.random() * 14).toFixed(0) + 'px';
+      document.body.appendChild(s);
+      (function(el){
+        setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 4500);
+      })(s);
+    }
+  }
+
   function win(){
     finished = true;
     stopTimer();
-    $('winStats').textContent =
-      'Время: ' + fmtTime(elapsed) + ' · ' + moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    if (mode === 'puzzle'){
+      $('winStats').textContent = 'Время: ' + fmtTime(elapsed) + ' · ' + ptotal + ' кусочков';
+    } else {
+      $('winStats').textContent =
+        'Время: ' + fmtTime(elapsed) + ' · ' + moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    }
     setTimeout(function(){ $('win').classList.add('show'); }, 2000);
-    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.notificationOccurred('success'); } catch(e){} }
+    sfxWin(); buzz('win'); confetti();
     if (tg && tg.BackButton) { try { tg.BackButton.hide(); } catch(e){} }
   }
 })();
