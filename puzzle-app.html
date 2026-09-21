@@ -735,7 +735,7 @@
     el.style.left = ''; el.style.top = '';
     el.style.width = ''; el.style.height = '';
     slot.appendChild(el);
-    slot.classList.add('done');
+    syncSlots();
   }
 
   function netSend(msg){
@@ -1134,6 +1134,14 @@
     }
   }
 
+  // слот занят ровно тогда, когда в нём лежит кусочек:
+  // так «пустая, но помеченная» клетка не остаётся после чужих ходов
+  function syncSlots(){
+    for (var i = 0; i < slotEls.length; i++){
+      slotEls[i].classList.toggle('done', !!slotEls[i].firstChild);
+    }
+  }
+
   function trayPieceSize(){
     var tray = $('tray');
     var w = tray.clientWidth || 320;
@@ -1212,7 +1220,7 @@
     var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     var best = null, bestD = 1e9, i, b, dx, dy, d;
     for (i = 0; i < slotEls.length; i++){
-      if (slotEls[i].classList.contains('done')) continue;
+      if (slotEls[i].firstChild) continue;
       b = slotEls[i].getBoundingClientRect();
       dx = (b.left + b.width / 2) - cx;
       dy = (b.top + b.height / 2) - cy;
@@ -1254,6 +1262,7 @@
     el.style.width = size + 'px';
     el.style.height = size + 'px';
     $('tray').appendChild(el);
+    syncSlots();
     if (net.on && !net.applying) netSend({type: 'move', idx: parseInt(el.dataset.idx, 10), slot: -1});
     sfxSwap(); buzz('swap');
   }
@@ -1265,7 +1274,7 @@
     el.style.left = ''; el.style.top = '';
     el.style.width = ''; el.style.height = '';
     slot.appendChild(el);
-    slot.classList.add('done');
+    syncSlots();
     if (right){
       sfxSnap(); buzz('snap');
       el.classList.remove('snap');
