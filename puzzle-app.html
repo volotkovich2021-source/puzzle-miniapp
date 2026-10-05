@@ -1,4 +1,241 @@
-<!--@@SETUP-->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Пазл</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg:#17212b; --card:#1f2c3a; --card2:#243447; --line:#2e4055;
+    --text:#eaf1f8; --muted:#8fa3b8; --accent:#4aa3ff; --accent2:#2f8ce0;
+    --ok:#3ddc97;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text); overscroll-behavior:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  body{min-height:100vh; display:flex; justify-content:center;}
+  #app{width:100%; max-width:520px; padding:16px; padding-top:calc(16px + env(safe-area-inset-top));}
+  .screen{display:none;}
+  .screen.active{display:block;}
+
+  h1{font-size:28px; margin:8px 0 4px; text-align:center;}
+  .sub{color:var(--muted); text-align:center; margin:0 0 20px; font-size:14px;}
+
+  .tabs{display:flex; background:var(--card); border-radius:12px; padding:4px; margin-bottom:14px;}
+  .tab{flex:1; border:0; background:transparent; color:var(--muted); font-size:15px;
+    padding:10px; border-radius:9px; cursor:pointer; font-weight:600;}
+  .tab.active{background:var(--card2); color:var(--text);}
+
+  .pane{display:none;}
+  .pane.active{display:block;}
+
+  .drop{display:flex; align-items:center; justify-content:center; gap:10px;
+    min-height:110px; background:var(--card); border:2px dashed var(--line);
+    border-radius:14px; color:var(--muted); cursor:pointer; text-align:center; padding:16px;
+    font-size:15px;}
+  .drop.has{border-style:solid; border-color:var(--accent); color:var(--text);}
+  #previewWrap{display:none; margin-top:12px; text-align:center;}
+  #preview{max-width:100%; max-height:180px; border-radius:12px; display:block; margin:0 auto;}
+
+  input[type=text]{width:100%; padding:14px; border-radius:12px; border:1px solid var(--line);
+    background:var(--card); color:var(--text); font-size:15px; outline:none;}
+  input[type=text]:focus{border-color:var(--accent);}
+
+  button.primary{width:100%; margin-top:12px; padding:14px; border:0; border-radius:12px;
+    background:linear-gradient(180deg,var(--accent),var(--accent2)); color:#fff;
+    font-size:16px; font-weight:700; cursor:pointer;}
+  button.primary:disabled{opacity:.4; cursor:default;}
+  button.big{font-size:17px; padding:16px;}
+  button.ghost{width:100%; margin-top:10px; padding:12px; border:0; border-radius:12px;
+    background:transparent; color:var(--muted); font-size:15px; cursor:pointer;}
+
+  .status{color:var(--muted); font-size:13px; margin-top:8px; min-height:18px;}
+  .status.err{color:#ff8080;}
+
+  .diff{margin-top:20px; display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .diff span{color:var(--muted); font-size:14px;}
+  .diff-btns{display:flex; gap:8px;}
+  .diff-btn{border:1px solid var(--line); background:var(--card); color:var(--muted);
+    padding:9px 14px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;}
+  .diff-btn.active{border-color:var(--accent); color:var(--text); background:var(--card2);}
+
+  .hud{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .hud .chip{background:var(--card); border-radius:10px; padding:8px 12px; font-size:14px;
+    font-weight:600; font-variant-numeric:tabular-nums;}
+  .hud .spacer{flex:1;}
+  .hud button{border:0; background:var(--card); color:var(--text); border-radius:10px;
+    padding:8px 12px; font-size:15px; cursor:pointer; font-weight:600;}
+
+  .board-wrap{position:relative; width:100%; aspect-ratio:1/1; border-radius:14px; overflow:hidden;
+    background:var(--card); touch-action:none;}
+  #peekImg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
+  #board{position:relative; z-index:1; width:100%; height:100%; display:grid; gap:2px;
+    background:var(--line); transition:opacity .12s;}
+  .cell{background-repeat:no-repeat; cursor:pointer;
+    outline:3px solid transparent; outline-offset:-3px;}
+  .cell.sel{outline-color:var(--accent);}
+  .cell.done{outline:1px solid rgba(61,220,151,.35); outline-offset:-1px;}
+
+  .overlay{position:fixed; inset:0; background:rgba(10,16,24,.86); display:flex; opacity:0; visibility:hidden; transition:opacity .25s ease, visibility .25s;
+    align-items:center; justify-content:center; z-index:50; padding:20px;}
+  .overlay.show{opacity:1; visibility:visible;}
+  .win-card{background:var(--card); border-radius:18px; padding:26px 22px; width:100%;
+    max-width:340px; text-align:center;}
+  .win-emoji{font-size:48px;}
+  .win-card h2{margin:6px 0; font-size:24px;}
+  .win-card p{color:var(--muted); margin:0 0 6px; font-size:15px;}
+
+  /* ---------- живость: анимации ---------- */
+  .cell{transition:transform .12s ease, outline-color .12s ease;}
+  .cell.sel{animation:selPulse .9s ease-in-out infinite;}
+  @keyframes selPulse{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(.93);}
+  }
+  .cell.appear{animation:appear .28s ease both;}
+  @keyframes appear{
+    from{opacity:0; transform:scale(.55);}
+    to{opacity:1; transform:scale(1);}
+  }
+  .cell.snap{animation:snap .45s ease;}
+  @keyframes snap{
+    0%{transform:scale(1); filter:brightness(1);}
+    35%{transform:scale(1.12); filter:brightness(1.4);}
+    100%{transform:scale(1); filter:brightness(1);}
+  }
+  .chip.bump{animation:bump .3s ease;}
+  @keyframes bump{
+    0%{transform:scale(1);}
+    40%{transform:scale(1.15);}
+    100%{transform:scale(1);}
+  }
+  .overlay.show .win-card{animation:cardIn .45s cubic-bezier(.2,1.4,.5,1) both;}
+  @keyframes cardIn{
+    from{opacity:0; transform:scale(.8) translateY(16px);}
+    to{opacity:1; transform:scale(1) translateY(0);}
+  }
+  #win.show .win-emoji{animation:emojiPop .7s ease;}
+  @keyframes emojiPop{
+    0%{transform:scale(.3) rotate(-25deg);}
+    60%{transform:scale(1.25) rotate(10deg);}
+    100%{transform:scale(1) rotate(0);}
+  }
+  .confetti{position:fixed; top:-40px; font-size:22px; pointer-events:none; z-index:60;
+    animation:fall linear forwards;}
+  @keyframes fall{
+    to{transform:translateY(115vh) rotate(360deg); opacity:.15;}
+  }
+
+  /* ---------- режим «Пазл» ---------- */
+  .modes-title{color:var(--muted); font-size:13px; letter-spacing:.08em; text-transform:uppercase;
+    text-align:center; margin:22px 0 10px; font-weight:700;}
+  .modes{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .code-show{font-size:46px; letter-spacing:.16em; font-weight:800; text-align:center;
+    background:var(--card); border-radius:14px; padding:14px 0; margin:6px 0 12px;
+    font-variant-numeric:tabular-nums; color:#fff;}
+  .mode-card{border:2px solid var(--line); background:var(--card); color:var(--text);
+    border-radius:16px; padding:18px 10px 16px; min-height:150px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    font-family:inherit; text-align:center; transition:transform .12s ease, border-color .12s ease;}
+  .mode-card:active{transform:scale(.97);}
+  .mode-card .ic{font-size:40px; line-height:1;}
+  .mode-card .tt{font-size:18px; font-weight:800;}
+  .mode-card .ds{font-size:12.5px; line-height:1.35; color:var(--muted);}
+  .mode-card.active{border-color:var(--accent); background:var(--card2);
+    box-shadow:0 0 0 3px rgba(74,163,255,.16);}
+  .mode-card.active .tt{color:#fff;}
+  .mode-card.active .ds{color:var(--text);}
+
+  #puzzleBoard{position:absolute; inset:0; z-index:2; display:none; gap:0;
+    background:transparent; touch-action:none;}
+  #puzzleBoard.on{display:grid;}
+  .slot{background-repeat:no-repeat; background-color:rgba(255,255,255,.06); border-radius:3px;
+    outline:1px dashed rgba(255,255,255,.10); outline-offset:-1px; position:relative;}
+  .slot.done{outline-color:transparent; outline-style:none;}
+  .slot.hot{outline:2px solid var(--accent); outline-offset:-2px; outline-style:solid;}
+  .slot .piece{position:absolute; right:auto; bottom:auto; left:-20%; top:-20%;
+    width:140%; height:140%; box-shadow:none; border-radius:0; cursor:default;}
+
+  .tray{display:none; flex-wrap:wrap; gap:6px; margin-top:12px; min-height:84px;
+    background:var(--card); border-radius:12px; padding:8px; touch-action:none;}
+  .tray.on{display:flex;}
+  .tray:empty::after{content:'кусочки разложены'; color:var(--muted); font-size:13px;
+    margin:auto;}
+  .piece{background-repeat:no-repeat; background-size:100% 100%; cursor:grab; touch-action:none;
+    filter:drop-shadow(0 2px 2px rgba(0,0,0,.45)); will-change:left,top;}
+  .piece.drag{position:fixed; z-index:70; cursor:grabbing; transform:scale(1.08);
+    filter:drop-shadow(0 8px 14px rgba(0,0,0,.6)); pointer-events:none;}
+  .piece.back{transition:left .16s ease, top .16s ease;}
+  @keyframes popin{
+    from{opacity:0; transform:scale(.7);}
+    to{opacity:1; transform:scale(1);}
+  }
+  .tray .piece{animation:popin .22s ease both;}
+  /* ---------- новый интерфейс: нижние вкладки и экраны ---------- */
+  #nav{position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:520px;
+    display:flex; background:#141f2a; border-top:1px solid var(--line); z-index:40;
+    padding-bottom:env(safe-area-inset-bottom);}
+  #nav.hide{display:none;}
+  #nav button{flex:1; border:0; background:transparent; color:var(--muted); padding:9px 0 11px;
+    font-size:11px; font-weight:600; font-family:inherit; cursor:pointer; display:flex;
+    flex-direction:column; align-items:center; gap:3px;}
+  #nav button .i{font-size:20px; line-height:1;}
+  #nav button.active{color:var(--accent);}
+  body.withnav #app{padding-bottom:calc(88px + env(safe-area-inset-bottom));}
+
+  .hero{background:linear-gradient(160deg,#26405c,#1c2b3b); border:1px solid var(--line);
+    border-radius:16px; padding:14px; margin:10px 0 4px;}
+  .hero-lbl{font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+    margin:0 0 10px;}
+  .hero-row{display:flex; gap:12px; align-items:center;}
+  .hero-thumb{width:76px; height:76px; border-radius:12px; flex:none; overflow:hidden;
+    background:var(--card); display:flex; align-items:center; justify-content:center;
+    font-size:26px;}
+  .hero-thumb img{width:100%; height:100%; object-fit:cover; display:none;}
+  .hero-thumb.has img{display:block;}
+  .hero-thumb.has span{display:none;}
+  .hero-meta{flex:1; min-width:0;}
+  .hero-t{font-weight:700; font-size:16px; margin-bottom:4px;}
+  .hero-s{color:var(--muted); font-size:13px; line-height:1.4;}
+
+  .sec{color:var(--muted); font-size:13px; letter-spacing:.08em; text-transform:uppercase;
+    font-weight:700; margin:22px 0 10px;}
+  .hint{color:var(--muted); font-size:12.5px; line-height:1.5; margin:10px 0 0;}
+  .sticky{margin-top:18px;}
+
+  .tabs{background:transparent; padding:0; gap:8px; display:flex; margin-bottom:14px;}
+  .tab{flex:0 0 auto; border:1px solid var(--line); background:var(--card); color:var(--muted);
+    padding:9px 13px; border-radius:999px; font-size:13.5px; font-weight:600;}
+  .tab.active{border-color:var(--accent); color:var(--text); background:var(--card2);}
+  /* ---------- рейтинг ---------- */
+  .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:14px 0;}
+  .row > span{color:var(--muted); font-size:14px;}
+  .segs{display:flex; gap:8px;}
+  .seg{border:1px solid var(--line); background:var(--card); color:var(--muted);
+    padding:9px 14px; border-radius:10px; font-size:14px; font-weight:600;
+    cursor:pointer; font-family:inherit;}
+  .seg.active{border-color:var(--accent); color:var(--text); background:var(--card2);}
+  .list{background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .item{display:flex; align-items:center; gap:11px; padding:11px 13px;
+    border-bottom:1px solid var(--line);}
+  .item:last-child{border-bottom:0;}
+  .item .pos{width:24px; text-align:center; font-weight:700; color:var(--muted);
+    font-variant-numeric:tabular-nums;}
+  .item .pos.top1{color:#ffcc4a;} .item .pos.top2{color:#c9d3dd;} .item .pos.top3{color:#e0915a;}
+  .item .av{width:34px; height:34px; border-radius:50%; flex:none; display:flex;
+    align-items:center; justify-content:center; font-weight:700; font-size:14px;
+    color:#0e1620; background:var(--accent);}
+  .item .nm{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-size:15px;}
+  .item .tm{font-variant-numeric:tabular-nums; font-weight:700; font-size:15px;}
+  .item.me{background:var(--card2);}
+  .item.me .tm{color:var(--ok);}
+  .list .hint{margin:0; padding:14px;}
+</style>
+</head>
+<body>
+<div id="app">
   <!-- ЭКРАН: Игра -->
   <section id="setup" class="screen active">
     <h1>🧩 Пазл</h1>
@@ -52,24 +289,23 @@
     <button id="duetBtn" class="primary big" style="display:none">👥 Играть вдвоём</button>
   </section>
 
-<!--@@PICS-->
   <!-- ЭКРАН: Картинки -->
   <section id="pics" class="screen">
     <h1>🖼 Картинки</h1>
     <p class="sub">Что будем собирать</p>
 
     <div class="tabs">
-      <button class="tab active" data-src="photo">Своё фото</button>
+      <button class="tab active" data-src="ready">Готовые</button>
+      <button class="tab" data-src="photo">Своё фото</button>
       <button class="tab" data-src="gen">По описанию</button>
-      <button class="tab" data-src="ready">Готовые</button>
     </div>
 
-    <div id="paneReady" class="pane">
+    <div id="paneReady" class="pane active">
       <p class="hint">Готовые картинки появятся здесь — их можно будет выбирать в один тап,
-        без загрузки фото. Пока выбирай своё фото или рисуй по описанию.</p>
+        без загрузки фото. Пока загляни во вкладки «Своё фото» или «По описанию».</p>
     </div>
 
-    <div id="panePhoto" class="pane active">
+    <div id="panePhoto" class="pane">
       <label class="drop" id="drop" for="fileInput">
         <span id="dropText">📷 Нажми, чтобы выбрать фото</span>
         <input id="fileInput" type="file" accept="image/*" hidden>
@@ -93,9 +329,1213 @@
     </div>
   </section>
 
-<!--@@NAV-->
+  <section id="duet" class="screen">
+    <h1>👥 Игра вдвоём</h1>
+    <p class="sub">Собирайте одну картинку вместе</p>
+
+    <div id="duetStart">
+      <button id="createRoomBtn" class="primary big">Создать комнату</button>
+      <p class="status" id="createStatus"></p>
+
+      <p class="modes-title">Или войди по коду друга</p>
+      <input id="codeInput" type="text" inputmode="numeric" maxlength="4" placeholder="4 цифры"
+             autocomplete="off">
+      <button id="joinRoomBtn" class="primary">Войти в комнату</button>
+      <p class="status" id="joinStatus"></p>
+    </div>
+
+    <div id="duetWait" style="display:none">
+      <p class="modes-title">Код комнаты</p>
+      <div class="code-show" id="codeShow">----</div>
+      <button id="inviteBtn" class="primary">📨 Позвать друга</button>
+      <button id="copyCodeBtn" class="ghost">Скопировать код</button>
+      <p class="status" id="waitStatus">Ждём второго игрока…</p>
+    </div>
+
+    <button class="ghost" id="duetBackBtn">← Назад</button>
+  </section>
+
+  <!-- Экран игры -->
+
+  <section id="game" class="screen">
+    <div class="hud">
+      <span class="chip" id="timer">0:00</span>
+      <span class="chip" id="moves">0 ходов</span>
+      <span class="chip" id="playersChip" style="display:none"></span>
+      <span class="spacer"></span>
+      <button id="peekBtn" title="Показать картинку">👁</button>
+      <button id="soundBtn" title="Звук вкл/выкл">🔊</button>
+      <button id="resetBtn" title="Перемешать заново">↺</button>
+    </div>
+    <div class="board-wrap">
+      <img id="peekImg" alt="">
+      <div id="board"></div>
+      <div id="puzzleBoard"></div>
+    </div>
+    <div id="tray" class="tray"></div>
+    <button id="backBtn" class="ghost">← Другая картинка</button>
+  </section>
+
+  <!-- ЭКРАН: Рейтинг -->
+  <section id="rating" class="screen">
+    <h1>🏆 Рейтинг дня</h1>
+    <p class="sub">Кто быстрее всех собрал сегодняшнюю картинку</p>
+
+    <div class="row">
+      <span>Период</span>
+      <div class="segs">
+        <button class="seg active" data-period="today">Сегодня</button>
+        <button class="seg" data-period="all">За всё время</button>
+      </div>
+    </div>
+
+    <div class="list" id="rateList">
+      <p class="hint">Рейтинг включим совсем скоро: сервер уже засекает время, а список мест
+        появится, когда подключим хранилище. Собирай — результат не потеряется.</p>
+    </div>
+
+    <p class="hint">Время считает сервер, зачётная попытка одна в день. Результаты быстрее
+      3 секунд в рейтинг не попадают — такие обычно дают скрипты.</p>
+  </section>
+
   <!-- нижняя навигация -->
   <nav id="nav">
     <button class="active" data-go="setup"><span class="i">🧩</span>Игра</button>
     <button data-go="pics"><span class="i">🖼</span>Картинки</button>
+    <button data-go="rating"><span class="i">🏆</span>Рейтинг</button>
   </nav>
+</div>
+
+<!-- Победа -->
+<div id="win" class="overlay">
+  <div class="win-card">
+    <div class="win-emoji">🎉</div>
+    <h2>Собрано!</h2>
+    <p id="winStats"></p>
+    <button id="shareBtn" class="primary big">📨 Поделиться результатом</button>
+    <button id="againBtn" class="primary big">Ещё раз</button>
+    <button id="otherBtn" class="ghost">Другая картинка</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  // ---------- звук и вибрация ----------
+  var soundOn = true;
+  try { soundOn = localStorage.getItem('puzzleSound') !== '0'; } catch(e){}
+  var actx = null;
+
+  // браузер включает звук только после первого касания — ждём его
+  function audioUnlock(){
+    if (!actx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) { try { actx = new AC(); } catch(e){ actx = null; } }
+    }
+    if (actx && actx.state === 'suspended') { try { actx.resume(); } catch(e){} }
+  }
+  ['pointerdown','touchstart','click'].forEach(function(ev){
+    document.addEventListener(ev, audioUnlock, {passive:true});
+  });
+
+  // пока тащим кусочек — гасим любые движения страницы
+  function lockScroll(on){
+    try {
+      document.documentElement.style.overflow = on ? 'hidden' : '';
+      document.body.style.overflow = on ? 'hidden' : '';
+    } catch(e){}
+  }
+  document.addEventListener('touchmove', function(e){
+    if (dragEl) e.preventDefault();
+  }, {passive:false});
+
+  // короткий тон с плавным затуханием — файлы не нужны
+  function tone(freq, start, dur, vol, type){
+    if (!soundOn || !actx) return;
+    try {
+      var t0 = actx.currentTime + (start || 0);
+      var osc = actx.createOscillator();
+      var gain = actx.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(vol || 0.14, t0 + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + (dur || 0.12));
+      osc.connect(gain);
+      gain.connect(actx.destination);
+      osc.start(t0);
+      osc.stop(t0 + (dur || 0.12) + 0.03);
+    } catch(e){}
+  }
+
+  function sfxPick(){ tone(660, 0, 0.07, 0.09, 'triangle'); }
+  function sfxSwap(){ tone(420, 0, 0.09, 0.12, 'square'); tone(560, 0.05, 0.09, 0.09, 'triangle'); }
+  function sfxSnap(){ tone(880, 0, 0.13, 0.13, 'sine'); tone(1320, 0.06, 0.16, 0.08, 'sine'); }
+  function sfxShuffle(){ tone(320, 0, 0.09, 0.09, 'triangle'); tone(250, 0.07, 0.10, 0.07, 'triangle'); }
+  function sfxWin(){
+    var notes = [523, 659, 784, 1047];
+    for (var i = 0; i < notes.length; i++) tone(notes[i], i * 0.13, 0.3, 0.15, 'sine');
+    tone(1568, 0.55, 0.5, 0.09, 'sine');
+  }
+
+  function buzz(kind){
+    if (!tg || !tg.HapticFeedback) return;
+    try {
+      if (kind === 'pick') tg.HapticFeedback.selectionChanged();
+      else if (kind === 'swap') tg.HapticFeedback.impactOccurred('light');
+      else if (kind === 'snap') tg.HapticFeedback.impactOccurred('medium');
+      else tg.HapticFeedback.notificationOccurred('success');
+    } catch(e){}
+  }
+
+  // ---------- состояние ----------
+  var n = 3;                 // размер сетки
+  var sourceURL = null;      // квадратная картинка (dataURL или blob)
+  var tiles = [];            // tiles[позиция] = индекс фрагмента
+  var sel = -1;              // выбранная клетка
+  var moves = 0;
+  var elapsed = 0, timerId = null, finished = false;
+
+  // ---------- режим и сложность ----------
+  var mode = 'shuffle';      // 'shuffle' — пятнашки, 'puzzle' — сборка кусочков
+  var psize = 12;            // сколько кусочков выбрано
+  var prows = 3, pcols = 4;  // раскладка поля пазла
+  var ptotal = 12;           // кусочков на поле
+  var slotEls = [];
+  var dragEl = null, dragHome = null, hotSlot = null;
+  var dragX0 = 0, dragY0 = 0, dragL = 0, dragT = 0;
+  var PADR = 0.20;               // насколько выступ кусочка выходит за клетку
+  var edgesV = [], edgesH = [];  // знаки замков на рёбрах поля
+  var pieceURLs = [];            // готовые картинки кусочков
+  var srcImg = null;             // картинка, из которой режем
+
+  // ---------- выбор источника ----------
+  document.querySelectorAll('.tab').forEach(function(t){
+    t.addEventListener('click', function(){
+      document.querySelectorAll('.tab').forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      var src = t.dataset.src;
+      $('panePhoto').classList.toggle('active', src === 'photo');
+      $('paneGen').classList.toggle('active', src === 'gen');
+      $('paneReady').classList.toggle('active', src === 'ready');
+      setStatus('');
+    });
+  });
+
+  document.querySelectorAll('.diff-btn').forEach(function(b){
+    b.addEventListener('click', function(){
+      b.parentNode.querySelectorAll('.diff-btn').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      if (b.dataset.p) psize = parseInt(b.dataset.p, 10);
+      else n = parseInt(b.dataset.n, 10);
+    });
+  });
+
+  // выбор игры: пятнашки или пазл
+  document.querySelectorAll('.mode-card').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('.mode-card').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      mode = b.dataset.mode;
+      $('diffShuffle').style.display = (mode === 'shuffle') ? 'flex' : 'none';
+      $('diffPuzzle').style.display = (mode === 'puzzle') ? 'flex' : 'none';
+      setDuetVisible();
+      sfxPick();
+    });
+  });
+
+  function setStatus(text, err){
+    var st = $('genStatus');
+    st.textContent = text || '';
+    st.className = 'status' + (err ? ' err' : '');
+  }
+
+  // ---------- загрузка своего фото ----------
+  $('fileInput').addEventListener('change', function(e){
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){ acceptImage(reader.result, 'Фото выбрано'); };
+    reader.readAsDataURL(f);
+  });
+
+  // ---------- генерация по тексту ----------
+  $('genBtn').addEventListener('click', function(){
+    var prompt = $('prompt').value.trim();
+    if (!prompt){ setStatus('Напиши, что нарисовать', true); return; }
+    $('genBtn').disabled = true;
+    setStatus('Рисую… бесплатный генератор отвечает примерно раз в 15 секунд');
+    fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({prompt: prompt})
+    }).then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.blob();
+    }).then(function(blob){
+      acceptImage(URL.createObjectURL(blob), 'Картинка готова');
+    }).catch(function(){
+      setStatus('Не получилось сгенерировать. Попробуй ещё раз или загрузи фото.', true);
+    }).then(function(){
+      $('genBtn').disabled = false;
+    });
+  });
+
+  // ---------- приём картинки от любого источника ----------
+  function acceptImage(url, note){
+    var img = new Image();
+    img.onload = function(){
+      try {
+        sourceURL = squareDataURL(img, 900);
+      } catch(e){
+        sourceURL = url; // на всякий случай: без обрезки
+      }
+      $('preview').src = sourceURL;
+      $('previewWrap').style.display = 'block';
+      $('drop').classList.add('has');
+      $('dropText').textContent = '📷 Другое фото';
+      $('startBtn').disabled = false;
+      $('picsStart').disabled = false;
+      $('chosenThumb').src = sourceURL;
+      $('chosenWrap').classList.add('has');
+      $('chosenText').textContent = 'Картинка выбрана';
+      $('chosenSub').textContent = 'Нажми «Начать» — и собирай';
+      setStatus(note || 'Готово');
+    };
+    img.onerror = function(){ setStatus('Картинку не удалось прочитать', true); };
+    img.src = url;
+  }
+
+  // ---------- убрать выбранную картинку и вернуться к выбору ----------
+  $('clearBtn').addEventListener('click', function(){
+    sourceURL = null;
+    $('preview').removeAttribute('src');
+    $('previewWrap').style.display = 'none';
+    $('drop').classList.remove('has');
+    $('dropText').textContent = '📷 Нажми, чтобы выбрать фото';
+    $('fileInput').value = '';
+    $('startBtn').disabled = true;
+    $('picsStart').disabled = true;
+    $('chosenThumb').removeAttribute('src');
+    $('chosenWrap').classList.remove('has');
+    $('chosenText').textContent = 'Картинка не выбрана';
+    $('chosenSub').textContent = 'Выбери готовую, загрузи своё фото или нарисуй по описанию';
+    setStatus('');
+    try { sfxPick(); } catch(e){}
+    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.selectionChanged(); } catch(e){} }
+  });
+
+  // обрезаем по центру в квадрат, чтобы фрагменты были ровными
+  function squareDataURL(img, size){
+    var c = document.createElement('canvas');
+    c.width = c.height = size;
+    var ctx = c.getContext('2d');
+    var side = Math.min(img.naturalWidth, img.naturalHeight) || size;
+    var sx = (img.naturalWidth - side) / 2;
+    var sy = (img.naturalHeight - side) / 2;
+    ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+    return c.toDataURL('image/jpeg', 0.9);
+  }
+  // ---------- запуск игры ----------
+  $('startBtn').addEventListener('click', function(){
+    if (!sourceURL) return;
+    net.on = false;
+    $('peekImg').src = sourceURL;
+    show('game');
+    resetGame();
+  });
+
+  // ---------- игра вдвоём: комнаты ----------
+  var net = { on: false, host: false, code: null, ws: null, sid: null,
+              count: 1, playing: false, lastState: null, applying: false,
+              edgesV: [], edgesH: [], order: [], placed: {} };
+
+  function setDuetVisible(){
+    $('duetBtn').style.display = (mode === 'puzzle') ? 'block' : 'none';
+  }
+
+  function paintPlayers(){
+    var el = $('playersChip');
+    if (!el) return;
+    el.textContent = net.on ? ('👥 ' + net.count) : '';
+    el.style.display = net.on ? 'inline-block' : 'none';
+  }
+
+  function randomEdges(rows, cols){
+    var ev = [], eh = [], r, c;
+    for (r = 0; r < rows; r++){
+      ev[r] = []; eh[r] = [];
+      for (c = 0; c < cols; c++){ ev[r][c] = 0; eh[r][c] = 0; }
+    }
+    for (r = 0; r < rows; r++)
+      for (c = 0; c < cols - 1; c++) ev[r][c] = (Math.random() < 0.5) ? 1 : -1;
+    for (r = 0; r < rows - 1; r++)
+      for (c = 0; c < cols; c++) eh[r][c] = (Math.random() < 0.5) ? 1 : -1;
+    return {ev: ev, eh: eh};
+  }
+
+  function shuffledOrder(n){
+    var a = [], i, j, t;
+    for (i = 0; i < n; i++) a.push(i);
+    for (i = a.length - 1; i > 0; i--){
+      j = Math.floor(Math.random() * (i + 1));
+      t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  $('duetBtn').addEventListener('click', function(){
+    $('duetStart').style.display = 'block';
+    $('duetWait').style.display = 'none';
+    $('createRoomBtn').disabled = !sourceURL;
+    $('createStatus').textContent = sourceURL ? '' : 'Сначала выбери картинку';
+    $('joinStatus').textContent = '';
+    $('codeInput').value = '';
+    show('duet');
+  });
+
+  $('duetBackBtn').addEventListener('click', function(){
+    leaveRoom();
+    show('setup');
+  });
+
+  $('createRoomBtn').addEventListener('click', function(){
+    if (!sourceURL) return;
+    var lay = layoutFor(psize);
+    var rows = lay.rows, cols = lay.cols;
+    var e = randomEdges(rows, cols);
+    $('createRoomBtn').disabled = true;
+    $('createStatus').textContent = 'Создаю комнату…';
+    fetch('/api/room/create', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image: sourceURL, psize: psize, pcols: cols, prows: rows,
+                            edges_v: e.ev, edges_h: e.eh, order: shuffledOrder(rows * cols)})
+    }).then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(data){
+      $('createRoomBtn').disabled = false;
+      $('createStatus').textContent = '';
+      $('duetStart').style.display = 'none';
+      $('duetWait').style.display = 'block';
+      $('codeShow').textContent = data.code;
+      openRoom(data.code, true);
+    }).catch(function(){
+      $('createRoomBtn').disabled = false;
+      $('createStatus').textContent = 'Не получилось создать комнату. Попробуй ещё раз.';
+    });
+  });
+
+  function joinRoom(code){
+    $('joinStatus').textContent = 'Ищу комнату…';
+    fetch('/api/room/join', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code: code})
+    }).then(function(r){
+      if (r.status === 404) throw new Error('notfound');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(data){
+      $('joinStatus').textContent = '';
+      sourceURL = data.image;
+      $('duetStart').style.display = 'none';
+      $('duetWait').style.display = 'block';
+      $('codeShow').textContent = code;
+      $('waitStatus').textContent = 'Вхожу в комнату…';
+      openRoom(code, false, data.state);
+    }).catch(function(err){
+      $('joinStatus').textContent = (err.message === 'notfound')
+        ? 'Такой комнаты нет — проверь код'
+        : 'Не получилось войти. Попробуй ещё раз.';
+    });
+  }
+
+  $('joinRoomBtn').addEventListener('click', function(){
+    var code = ($('codeInput').value || '').replace(/\D/g, '').slice(0, 4);
+    if (code.length !== 4){ $('joinStatus').textContent = 'Введи 4 цифры кода'; return; }
+    joinRoom(code);
+  });
+
+  function openRoom(code, host, state){
+    leaveRoom();
+    net.on = true; net.host = !!host; net.code = code;
+    net.count = 1; net.playing = false; net.lastState = state || null;
+    $('waitStatus').textContent = host ? 'Ждём второго игрока…' : 'Вхожу…';
+    var proto = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+    try {
+      net.ws = new WebSocket(proto + location.host + '/ws/room/' + code);
+    } catch (e){ net.ws = null; }
+    if (!net.ws){
+      $('waitStatus').textContent = 'Не удалось подключиться. Обнови страницу.';
+      return;
+    }
+    net.ws.onmessage = function(ev){
+      var m;
+      try { m = JSON.parse(ev.data); } catch (e){ return; }
+      if (m.type === 'hello'){
+        net.sid = m.sid; net.count = m.count; net.lastState = m.state;
+        paintPlayers(); maybeStart(null);
+      } else if (m.type === 'count'){
+        net.count = m.count; paintPlayers(); maybeStart(null);
+      } else if (m.type === 'move'){
+        if (m.sid !== net.sid) applyRemote(m.idx, m.slot);
+      } else if (m.type === 'reset'){
+        if (m.sid !== net.sid){
+          $('win').classList.remove('show');
+          net.placed = {};
+          buildNetPuzzle();
+        }
+      } else if (m.type === 'full'){
+        $('waitStatus').textContent = 'В комнате уже максимум игроков';
+        leaveRoom();
+      }
+    };
+  }
+
+  function maybeStart(state){
+    if (!net.on || net.playing) return;
+    if (net.count < 2) return;
+    var st = state || net.lastState;
+    if (!st) return;
+    net.playing = true;
+    enterNetGame(st);
+  }
+
+  function enterNetGame(state){
+    psize = state.psize;
+    prows = state.prows; pcols = state.pcols;
+    net.edgesV = state.edges_v; net.edgesH = state.edges_h;
+    net.order = state.order; net.placed = state.placed || {};
+    $('peekImg').src = sourceURL;
+    show('game');
+    buildNetPuzzle();
+  }
+
+  function buildNetPuzzle(){
+    moves = 0; sel = -1; elapsed = 0; finished = false;
+    $('win').classList.remove('show');
+    ptotal = psize;
+    edgesV = net.edgesV; edgesH = net.edgesH;
+    $('board').style.display = 'none';
+    $('puzzleBoard').classList.add('on');
+    $('tray').classList.add('on');
+    $('peekImg').style.opacity = '0';
+    buildSlots();
+    updateHud();
+    paintPlayers();
+    audioUnlock();
+    pieceURLs = [];
+    $('tray').innerHTML = '';
+    var im = new Image();
+    im.onload = function(){
+      srcImg = im;
+      pieceURLs = [];
+      for (var i = 0; i < ptotal; i++){
+        pieceURLs.push(pieceImage(Math.floor(i / pcols), i % pcols));
+      }
+      var size = trayPieceSize(), k, idx;
+      for (k in net.placed){
+        idx = parseInt(k, 10);
+        putInSlot(makePiece(idx, size), slotEls[net.placed[k]]);
+      }
+      for (var j = 0; j < net.order.length; j++){
+        idx = net.order[j];
+        if (String(idx) in net.placed) continue;
+        $('tray').appendChild(makePiece(idx, size));
+      }
+      startTimer();
+    };
+    im.onerror = function(){ startTimer(); };
+    im.src = sourceURL;
+  }
+
+  function putInSlot(el, slot){
+    if (!el || !slot) return;
+    el.classList.remove('drag');
+    el.style.left = ''; el.style.top = '';
+    el.style.width = ''; el.style.height = '';
+    slot.appendChild(el);
+    syncSlots();
+  }
+
+  function netSend(msg){
+    if (!net.on || !net.ws || net.ws.readyState !== 1) return;
+    try { net.ws.send(JSON.stringify(msg)); } catch (e){}
+  }
+
+  function applyRemote(idx, slot){
+    net.applying = true;
+    var list = document.querySelectorAll('.piece'), el = null, i;
+    for (i = 0; i < list.length; i++){
+      if (String(list[i].dataset.idx) === String(idx)){ el = list[i]; break; }
+    }
+    if (el){
+      if (slot < 0) sendBack(el);
+      else putInSlot(el, slotEls[slot]);
+    }
+    net.applying = false;
+    updateHud();
+    if (correctCount() >= ptotal) win();
+  }
+
+  function leaveRoom(){
+    if (net.ws){ try { net.ws.close(); } catch (e){} }
+    net.on = false; net.ws = null; net.sid = null; net.playing = false;
+    paintPlayers();
+  }
+
+  $('inviteBtn').addEventListener('click', function(){
+    var url = 'https://t.me/tekst_redaktor_bot/play?startapp=' + net.code;
+    var text = 'Собери со мной пазл! Код комнаты: ' + net.code;
+    if (tg && tg.openTelegramLink){
+      try {
+        tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(url)
+                            + '&text=' + encodeURIComponent(text));
+        return;
+      } catch (e){}
+    }
+    try {
+      navigator.clipboard.writeText(url);
+      $('waitStatus').textContent = 'Ссылка скопирована — отправь её другу';
+    } catch (e){}
+  });
+
+  $('copyCodeBtn').addEventListener('click', function(){
+    try {
+      navigator.clipboard.writeText(String(net.code));
+      $('waitStatus').textContent = 'Код скопирован';
+    } catch (e){}
+  });
+
+  // нижние вкладки
+  document.body.classList.add('withnav');
+  $('nav').querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click', function(){ show(b.dataset.go); });
+  });
+  $('pickBtn').addEventListener('click', function(){ show('pics'); });
+
+  // ---------- рейтинг дня ----------
+  var ratePeriod = 'today';
+
+  function rateTime(ms){
+    return (ms / 1000).toFixed(1) + ' с';
+  }
+
+  function rateRow(place, name, ms, me){
+    var it = document.createElement('div');
+    it.className = 'item' + (me ? ' me' : '');
+    var cls = place === 1 ? ' top1' : (place === 2 ? ' top2' : (place === 3 ? ' top3' : ''));
+    var pos = document.createElement('span');
+    pos.className = 'pos' + cls; pos.textContent = place;
+    var av = document.createElement('span');
+    av.className = 'av'; av.textContent = String(name || '?').trim().charAt(0).toUpperCase();
+    var nm = document.createElement('span');
+    nm.className = 'nm'; nm.textContent = name || 'Игрок';
+    var tm = document.createElement('span');
+    tm.className = 'tm'; tm.textContent = rateTime(ms);
+    it.appendChild(pos); it.appendChild(av); it.appendChild(nm); it.appendChild(tm);
+    return it;
+  }
+
+  function loadRating(){
+    var box = $('rateList');
+    box.innerHTML = '<p class="hint">Загружаю…</p>';
+    fetch('/api/leaderboard?period=' + ratePeriod)
+      .then(function(r){ if (!r.ok) throw new Error('нет'); return r.json(); })
+      .then(function(d){
+        var rows = (d && d.top) || [];
+        box.innerHTML = '';
+        if (!rows.length){
+          box.innerHTML = '<p class="hint">Пока пусто — собери картинку дня первым.</p>';
+          return;
+        }
+        rows.forEach(function(x){ box.appendChild(rateRow(x.place, x.name, x.time, false)); });
+        if (d.me) box.appendChild(rateRow(d.me.place, 'Ты', d.me.time, true));
+      })
+      .catch(function(){
+        box.innerHTML = '<p class="hint">Рейтинг включим совсем скоро: сервер уже засекает ' +
+          'время, а список мест появится, когда подключим хранилище. Собирай — результат ' +
+          'не потеряется.</p>';
+      });
+  }
+
+  document.querySelectorAll('.seg').forEach(function(b){
+    b.addEventListener('click', function(){
+      b.parentNode.querySelectorAll('.seg').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      ratePeriod = b.dataset.period;
+      loadRating();
+    });
+  });
+
+
+  $('picsStart').addEventListener('click', function(){
+    if (!sourceURL) return;
+    net.on = false;
+    $('peekImg').src = sourceURL;
+    show('game');
+    resetGame();
+  });
+
+  // поделиться результатом
+  $('shareBtn').addEventListener('click', function(){
+    var text = 'Я собрал пазл за ' + fmtTime(elapsed) + ' 🧩 Попробуй побить!';
+    var link = 'https://t.me/tekst_redaktor_bot/play';
+    var url = 'https://t.me/share/url?url=' + encodeURIComponent(link) +
+              '&text=' + encodeURIComponent(text);
+    try {
+      if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
+      else window.open(url, '_blank');
+    } catch(e){ try { window.open(url, '_blank'); } catch(e2){} }
+  });
+
+  $('backBtn').addEventListener('click', function(){
+    stopTimer();
+    leaveRoom();
+    show('pics');
+  });
+
+  // вход по ссылке-приглашению: ?startapp=1234
+  (function(){
+    try {
+      var sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+      if (!/^\d{4}$/.test(sp)) return;
+      mode = 'puzzle';
+      document.querySelectorAll('.mode-card').forEach(function(x){
+        x.classList.toggle('active', x.dataset.mode === 'puzzle');
+      });
+      $('diffShuffle').style.display = 'none';
+      $('diffPuzzle').style.display = 'flex';
+      $('duetStart').style.display = 'none';
+      $('duetWait').style.display = 'block';
+      $('codeShow').textContent = sp;
+      $('waitStatus').textContent = 'Вхожу в комнату…';
+      show('duet');
+      joinRoom(sp);
+    } catch (e){}
+  })();
+
+  var soundBtnEl = $('soundBtn');
+  function paintSound(){ soundBtnEl.textContent = soundOn ? '🔊' : '🔇'; }
+  soundBtnEl.addEventListener('click', function(){
+    soundOn = !soundOn;
+    try { localStorage.setItem('puzzleSound', soundOn ? '1' : '0'); } catch(e){}
+    paintSound();
+    audioUnlock();
+    if (soundOn) sfxPick();
+  });
+  paintSound();
+
+  $('resetBtn').addEventListener('click', function(){
+    if (net.on){ net.placed = {}; netSend({type: 'reset'}); buildNetPuzzle(); }
+    else resetGame();
+  });
+  $('againBtn').addEventListener('click', function(){
+    $('win').classList.remove('show');
+    if (net.on){ net.placed = {}; netSend({type: 'reset'}); buildNetPuzzle(); }
+    else resetGame();
+  });
+  $('otherBtn').addEventListener('click', function(){
+    $('win').classList.remove('show');
+    stopTimer();
+    leaveRoom();
+    show('pics');
+  });
+
+  function show(name){
+    ['setup', 'pics', 'rating', 'game', 'duet'].forEach(function(k){
+      $(k).classList.toggle('active', k === name);
+    });
+    var withNav = (name === 'setup' || name === 'pics' || name === 'rating');
+    if (name === 'rating'){ try { loadRating(); } catch(e){} }
+    $('nav').classList.toggle('hide', !withNav);
+    document.body.classList.toggle('withnav', withNav);
+    $('nav').querySelectorAll('button').forEach(function(b){
+      b.classList.toggle('active', b.dataset.go === name);
+    });
+    // в игре свайп вниз не должен сворачивать приложение
+    if (tg && tg.disableVerticalSwipes && tg.enableVerticalSwipes){
+      try {
+        if (name === 'game') tg.disableVerticalSwipes();
+        else tg.enableVerticalSwipes();
+      } catch(e){}
+    }
+    if (name === 'setup'){
+      lockScroll(false);
+      $('puzzleBoard').classList.remove('on');
+      $('tray').classList.remove('on');
+      $('puzzleBoard').innerHTML = '';
+      $('tray').innerHTML = '';
+      slotEls = [];
+      $('board').style.display = 'grid';
+      $('peekImg').style.opacity = '1';
+    }
+    if (tg && tg.BackButton) {
+      try { name === 'game' ? tg.BackButton.show() : tg.BackButton.hide(); } catch(e){}
+    }
+  }
+  if (tg && tg.BackButton) {
+    tg.BackButton.onClick(function(){ stopTimer(); show('setup'); });
+  }
+
+  function resetGame(){
+    if (mode === 'puzzle'){ resetPuzzle(); return; }
+    moves = 0; sel = -1; elapsed = 0; finished = false;
+    $('win').classList.remove('show');
+    $('board').style.display = 'grid';
+    $('puzzleBoard').classList.remove('on');
+    $('tray').classList.remove('on');
+    tiles = shuffleTiles(n);
+    appearMode = true;
+    audioUnlock();
+    sfxShuffle();
+    render();
+    updateHud();
+    startTimer();
+  }
+
+  function shuffleTiles(nn){
+    var total = nn * nn, arr = [], i;
+    for (i = 0; i < total; i++) arr.push(i);
+    do {
+      for (i = total - 1; i > 0; i--){
+        var j = Math.floor(Math.random() * (i + 1));
+        var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      }
+    } while (isSolved(arr));
+    return arr;
+  }
+
+  function isSolved(arr){
+    for (var i = 0; i < arr.length; i++) if (arr[i] !== i) return false;
+    return true;
+  }
+
+  // ---------- отрисовка ----------
+  function tilePositionStyle(tile){
+    var r = Math.floor(tile / n), c = tile % n;
+    var denom = (n > 1) ? (n - 1) : 1;
+    return (c / denom * 100) + '% ' + (r / denom * 100) + '%';
+  }
+
+  var appearMode = false;  // новая раздача — клетки всплывают
+  var snapPos = -1;        // фрагмент, который только что встал на место
+
+  function render(){
+    var fresh = appearMode, snapAt = snapPos;
+    appearMode = false; snapPos = -1;
+    var board = $('board');
+    board.style.gridTemplateColumns = 'repeat(' + n + ', 1fr)';
+    board.innerHTML = '';
+    for (var pos = 0; pos < tiles.length; pos++){
+      var cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.style.backgroundImage = 'url(' + sourceURL + ')';
+      cell.style.backgroundSize = (n * 100) + '% ' + (n * 100) + '%';
+      cell.style.backgroundPosition = tilePositionStyle(tiles[pos]);
+      if (tiles[pos] === pos) cell.classList.add('done');
+      if (pos === sel) cell.classList.add('sel');
+      if (fresh){
+        cell.classList.add('appear');
+        cell.style.animationDelay = (pos * 18) + 'ms';
+      }
+      if (pos === snapAt) cell.classList.add('snap');
+      cell.dataset.pos = pos;
+      cell.addEventListener('click', onCellClick);
+      board.appendChild(cell);
+    }
+  }
+
+  function onCellClick(){
+    if (finished) return;
+    var pos = parseInt(this.dataset.pos, 10);
+    if (sel === -1){ sel = pos; sfxPick(); buzz('pick'); render(); return; }
+    if (sel === pos){ sel = -1; sfxPick(); buzz('pick'); render(); return; }
+    var a = sel, b = pos;
+    var wasDoneA = (tiles[a] === a), wasDoneB = (tiles[b] === b);
+    var t = tiles[a]; tiles[a] = tiles[b]; tiles[b] = t;
+    sel = -1; moves++;
+    updateHud();
+    bump($('moves'));
+    if (!wasDoneA && tiles[a] === a) snapPos = a;
+    else if (!wasDoneB && tiles[b] === b) snapPos = b;
+    if (snapPos >= 0){ sfxSnap(); buzz('snap'); } else { sfxSwap(); buzz('swap'); }
+    render();
+    if (isSolved(tiles)) win();
+  }
+
+  // ---------- таймер и счётчики ----------
+  function startTimer(){
+    stopTimer();
+    timerId = setInterval(function(){
+      elapsed++;
+      $('timer').textContent = fmtTime(elapsed);
+    }, 1000);
+  }
+  function stopTimer(){ if (timerId){ clearInterval(timerId); timerId = null; } }
+
+  function fmtTime(s){
+    var m = Math.floor(s / 60), ss = s % 60;
+    return m + ':' + (ss < 10 ? '0' : '') + ss;
+  }
+  function plural(nn, one, few, many){
+    var m10 = nn % 10, m100 = nn % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
+  }
+  function bump(el){
+    el.classList.remove('bump');
+    void el.offsetWidth;   // перезапуск анимации
+    el.classList.add('bump');
+  }
+  function correctCount(){
+    var c = 0;
+    for (var i = 0; i < slotEls.length; i++){
+      var el = slotEls[i].firstChild;
+      if (el && parseInt(el.dataset.idx, 10) === i) c++;
+    }
+    return c;
+  }
+  function updateHud(){
+    if (mode === 'puzzle'){
+      $('moves').textContent = correctCount() + ' из ' + ptotal;
+    } else {
+      $('moves').textContent = moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    }
+    $('timer').textContent = fmtTime(elapsed);
+  }
+
+  // ---------- подсказка (удержание) ----------
+  function peek(on){
+    if (mode === 'puzzle'){ $('peekImg').style.opacity = on ? '0.9' : '0'; }
+    else { $('board').style.opacity = on ? '0.22' : '1'; }
+  }
+  ['pointerdown','touchstart'].forEach(function(ev){
+    $('peekBtn').addEventListener(ev, function(e){ if (e.cancelable) e.preventDefault(); peek(true); });
+  });
+  ['pointerup','pointerleave','pointercancel','touchend','touchcancel'].forEach(function(ev){
+    $('peekBtn').addEventListener(ev, function(){ peek(false); });
+  });
+
+  // ---------- режим «Пазл»: кусочки перетаскиваются на поле ----------
+  function layoutFor(count){
+    if (count <= 12) return {rows:3, cols:4};
+    if (count <= 24) return {rows:4, cols:6};
+    return {rows:6, cols:8};
+  }
+
+  // ---------- фигурные кусочки, как у настоящего пазла ----------
+  var TAB_PTS = [[0.00,0.00],[0.32,0.00],[0.36,0.05],[0.38,0.18],[0.50,0.20],
+                 [0.62,0.18],[0.64,0.05],[0.68,0.00],[1.00,0.00]];
+
+  function makeEdges(){
+    edgesV = []; edgesH = [];
+    var r, c;
+    for (r = 0; r < prows; r++){
+      edgesV[r] = []; edgesH[r] = [];
+      for (c = 0; c < pcols; c++){ edgesV[r][c] = 0; edgesH[r][c] = 0; }
+    }
+    for (r = 0; r < prows; r++)
+      for (c = 0; c < pcols - 1; c++)
+        edgesV[r][c] = (Math.random() < 0.5) ? 1 : -1;
+    for (r = 0; r < prows - 1; r++)
+      for (c = 0; c < pcols; c++)
+        edgesH[r][c] = (Math.random() < 0.5) ? 1 : -1;
+  }
+
+  // сторона кусочка: прямая с «замком» посередине
+  function edgePath(ctx, ax, ay, bx, by, ox, oy, sign, W){
+    var pts = [], i;
+    for (i = 0; i < TAB_PTS.length; i++){
+      var u = TAB_PTS[i][0], v = TAB_PTS[i][1];
+      pts.push([ax + (bx - ax) * u + ox * v * W * sign,
+                ay + (by - ay) * u + oy * v * W * sign]);
+    }
+    var ext = [pts[0]].concat(pts, [pts[pts.length - 1]]);
+    ctx.lineTo(pts[0][0], pts[0][1]);
+    for (i = 1; i < ext.length - 2; i++){
+      var p0 = ext[i - 1], p1 = ext[i], p2 = ext[i + 1], p3 = ext[i + 2];
+      ctx.bezierCurveTo(
+        p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6,
+        p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6,
+        p2[0], p2[1]);
+    }
+  }
+
+  function piecePath(ctx, r, c, W, pad){
+    var x0 = pad, y0 = pad;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    if (r === 0) ctx.lineTo(x0 + W, y0);
+    else edgePath(ctx, x0, y0, x0 + W, y0, 0, -1, -edgesH[r - 1][c], W);
+    if (c === pcols - 1) ctx.lineTo(x0 + W, y0 + W);
+    else edgePath(ctx, x0 + W, y0, x0 + W, y0 + W, 1, 0, edgesV[r][c], W);
+    if (r === prows - 1) ctx.lineTo(x0, y0 + W);
+    else edgePath(ctx, x0 + W, y0 + W, x0, y0 + W, 0, 1, edgesH[r][c], W);
+    if (c === 0) ctx.lineTo(x0, y0);
+    else edgePath(ctx, x0, y0 + W, x0, y0, -1, 0, -edgesV[r][c - 1], W);
+    ctx.closePath();
+  }
+
+  // режем картинку на фигурные кусочки: у каждого свой прозрачный PNG
+  function pieceImage(r, c){
+    var CW = 176;                     // сторона клетки на картинке
+    var pad = CW * PADR;
+    var cv = document.createElement('canvas');
+    cv.width = cv.height = Math.round(CW + 2 * pad);
+    var ctx = cv.getContext('2d');
+    piecePath(ctx, r, c, CW, pad);
+    ctx.save();
+    ctx.clip();
+    ctx.drawImage(srcImg, -c * CW + pad, -r * CW + pad, CW * pcols, CW * prows);
+    ctx.restore();
+    return cv.toDataURL('image/png');
+  }
+
+  function resetPuzzle(){
+    moves = 0; sel = -1; elapsed = 0; finished = false;
+    $('win').classList.remove('show');
+    ptotal = psize;
+    var lay = layoutFor(ptotal);
+    prows = lay.rows; pcols = lay.cols;
+    makeEdges();
+
+    $('board').style.display = 'none';
+    $('puzzleBoard').classList.add('on');
+    $('tray').classList.add('on');
+    $('peekImg').style.opacity = '0';   // образец скрыт: собираем по кусочкам, а не по подсказке
+
+    buildSlots();
+    updateHud();
+    audioUnlock();
+    sfxShuffle();
+
+    // режем картинку на фигурные кусочки, когда она загрузилась
+    pieceURLs = [];
+    $('tray').innerHTML = '';
+    var im = new Image();
+    im.onload = function(){
+      srcImg = im;
+      pieceURLs = [];
+      for (var i = 0; i < ptotal; i++){
+        pieceURLs.push(pieceImage(Math.floor(i / pcols), i % pcols));
+      }
+      buildTray();
+      startTimer();
+    };
+    im.onerror = function(){ startTimer(); };
+    im.src = sourceURL;
+  }
+
+  function buildSlots(){
+    var pb = $('puzzleBoard');
+    pb.style.gridTemplateColumns = 'repeat(' + pcols + ', 1fr)';
+    pb.style.gridTemplateRows = 'repeat(' + prows + ', 1fr)';
+    pb.innerHTML = '';
+    slotEls = [];
+    for (var i = 0; i < prows * pcols; i++){
+      var s = document.createElement('div');
+      s.className = 'slot';
+      s.dataset.slot = i;
+      pb.appendChild(s);
+      slotEls.push(s);
+    }
+  }
+
+  // слот занят ровно тогда, когда в нём лежит кусочек:
+  // так «пустая, но помеченная» клетка не остаётся после чужих ходов
+  function syncSlots(){
+    for (var i = 0; i < slotEls.length; i++){
+      slotEls[i].classList.toggle('done', !!slotEls[i].firstChild);
+    }
+  }
+
+  function trayPieceSize(){
+    var tray = $('tray');
+    var w = tray.clientWidth || 320;
+    var per = 5;                                   // кусочков в ряд
+    var size = Math.floor((w - 6 * (per + 1)) / (per * (1 + 2 * PADR)));
+    return Math.max(30, Math.min(56, size));
+  }
+
+  function makePiece(idx, w){
+    var p = document.createElement('div');
+    p.className = 'piece';
+    p.dataset.idx = idx;
+    var full = Math.round(w * (1 + 2 * PADR));
+    p.style.width = full + 'px';
+    p.style.height = full + 'px';
+    p.style.backgroundImage = 'url(' + pieceURLs[idx] + ')';
+    p.addEventListener('pointerdown', pieceDown);
+    return p;
+  }
+
+  function buildTray(){
+    var tray = $('tray');
+    tray.innerHTML = '';
+    var size = trayPieceSize();
+    var order = [], i, j, t;
+    for (i = 0; i < ptotal; i++) order.push(i);
+    for (i = order.length - 1; i > 0; i--){
+      j = Math.floor(Math.random() * (i + 1));
+      t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    for (i = 0; i < order.length; i++) tray.appendChild(makePiece(order[i], size));
+  }
+
+  // ---------- перетаскивание кусочков ----------
+  function pieceDown(e){
+    if (finished || dragEl) return;
+    e.preventDefault();
+    lockScroll(true);
+    audioUnlock();
+    dragEl = this;
+    dragHome = this.parentNode;
+    var r = this.getBoundingClientRect();
+    dragL = r.left; dragT = r.top;
+    dragX0 = e.clientX; dragY0 = e.clientY;
+    if (dragHome && dragHome.classList && dragHome.classList.contains('slot')){
+      dragHome.classList.remove('done');
+    }
+    this.classList.add('drag');
+    this.style.width = r.width + 'px';
+    this.style.height = r.height + 'px';
+    this.style.left = dragL + 'px';
+    this.style.top = dragT + 'px';
+    document.body.appendChild(this);
+    highlightSlot();
+    sfxPick(); buzz('pick');
+    document.addEventListener('pointermove', pieceMove);
+    document.addEventListener('pointerup', pieceUp);
+    document.addEventListener('pointercancel', pieceUp);
+  }
+
+  function pieceMove(e){
+    if (!dragEl) return;
+    e.preventDefault();
+    dragL += e.clientX - dragX0;
+    dragT += e.clientY - dragY0;
+    dragX0 = e.clientX; dragY0 = e.clientY;
+    dragEl.style.left = dragL + 'px';
+    dragEl.style.top = dragT + 'px';
+    highlightSlot();
+  }
+
+  // ближайший свободный слот к центру кусочка (с допуском)
+  function nearestSlot(){
+    if (!dragEl) return null;
+    var r = dragEl.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var best = null, bestD = 1e9, i, b, dx, dy, d;
+    for (i = 0; i < slotEls.length; i++){
+      if (slotEls[i].firstChild) continue;
+      b = slotEls[i].getBoundingClientRect();
+      dx = (b.left + b.width / 2) - cx;
+      dy = (b.top + b.height / 2) - cy;
+      d = Math.sqrt(dx * dx + dy * dy);
+      if (d < bestD){ bestD = d; best = slotEls[i]; }
+    }
+    if (!best) return null;
+    b = best.getBoundingClientRect();
+    var near = Math.max(b.width, b.height) * 0.7;
+    return (bestD <= near) ? best : null;
+  }
+
+  function highlightSlot(){
+    var s = nearestSlot();
+    if (s === hotSlot) return;
+    if (hotSlot) hotSlot.classList.remove('hot');
+    hotSlot = s;
+    if (hotSlot) hotSlot.classList.add('hot');
+  }
+
+  function pieceUp(){
+    if (!dragEl) return;
+    lockScroll(false);
+    document.removeEventListener('pointermove', pieceMove);
+    document.removeEventListener('pointerup', pieceUp);
+    document.removeEventListener('pointercancel', pieceUp);
+    var el = dragEl;
+    var target = nearestSlot();
+    if (hotSlot){ hotSlot.classList.remove('hot'); hotSlot = null; }
+    dragEl = null;
+    if (target) placePiece(el, target);
+    else sendBack(el);
+  }
+
+  function sendBack(el){
+    var size = Math.round(trayPieceSize() * (1 + 2 * PADR));
+    el.classList.remove('drag');
+    el.style.left = ''; el.style.top = '';
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    $('tray').appendChild(el);
+    syncSlots();
+    if (net.on && !net.applying) netSend({type: 'move', idx: parseInt(el.dataset.idx, 10), slot: -1});
+    sfxSwap(); buzz('swap');
+  }
+
+  function placePiece(el, slot){
+    var idx = parseInt(el.dataset.idx, 10);
+    var right = (String(slot.dataset.slot) === String(idx));
+    el.classList.remove('drag');
+    el.style.left = ''; el.style.top = '';
+    el.style.width = ''; el.style.height = '';
+    slot.appendChild(el);
+    syncSlots();
+    if (right){
+      sfxSnap(); buzz('snap');
+      el.classList.remove('snap');
+      void el.offsetWidth;
+      el.classList.add('snap');
+    } else {
+      sfxSwap(); buzz('swap');
+    }
+    if (net.on && !net.applying) netSend({type: 'move', idx: idx, slot: parseInt(slot.dataset.slot, 10)});
+    updateHud();
+    if (correctCount() >= ptotal) win();
+  }
+
+  // ---------- победа ----------
+  function confetti(){
+    var emo = ['🎉','✨','⭐','🎊','💫'];
+    for (var i = 0; i < 16; i++){
+      var s = document.createElement('div');
+      s.className = 'confetti';
+      s.textContent = emo[i % emo.length];
+      s.style.left = (Math.random() * 92) + '%';
+      s.style.animationDuration = (1.6 + Math.random() * 1.5) + 's';
+      s.style.animationDelay = (Math.random() * 0.6) + 's';
+      s.style.fontSize = (16 + Math.random() * 14).toFixed(0) + 'px';
+      document.body.appendChild(s);
+      (function(el){
+        setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 4500);
+      })(s);
+    }
+  }
+
+  function win(){
+    finished = true;
+    stopTimer();
+    if (mode === 'puzzle'){
+      $('winStats').textContent = 'Время: ' + fmtTime(elapsed) + ' · ' + ptotal + ' кусочков';
+    } else {
+      $('winStats').textContent =
+        'Время: ' + fmtTime(elapsed) + ' · ' + moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    }
+    setTimeout(function(){ $('win').classList.add('show'); }, 2000);
+    sfxWin(); buzz('win'); confetti();
+    if (tg && tg.BackButton) { try { tg.BackButton.hide(); } catch(e){} }
+  }
+})();
+</script>
+</body>
+</html>
