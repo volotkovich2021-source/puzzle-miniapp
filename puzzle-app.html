@@ -177,6 +177,14 @@
     display:flex; background:#141f2a; border-top:1px solid var(--line); z-index:40;
     padding-bottom:env(safe-area-inset-bottom);}
   #nav.hide{display:none;}
+  #onb{position:fixed; inset:0; background:rgba(0,0,0,.62); display:none; align-items:center;
+    justify-content:center; padding:20px; z-index:70;}
+  #onb.on{display:flex;}
+  .onb-card{background:var(--card); border-radius:18px; padding:22px 20px; max-width:380px;
+    width:100%; text-align:center;}
+  .onb-ic{font-size:46px; line-height:1; margin-bottom:8px;}
+  .onb-card h2{margin:0 0 12px; font-size:20px;}
+  .onb-list{text-align:left; margin:0 0 18px; padding-left:20px; color:var(--muted); line-height:1.65;}
   #nav button{flex:1; border:0; background:transparent; color:var(--muted); padding:9px 0 11px;
     font-size:11px; font-weight:600; font-family:inherit; cursor:pointer; display:flex;
     flex-direction:column; align-items:center; gap:3px;}
@@ -239,10 +247,42 @@
   <!-- ЭКРАН: Игра -->
   <section id="setup" class="screen active">
     <h1>🧩 Пазл</h1>
-    <p class="sub">Собери картинку на время</p>
+    <p class="sub">Собирай картинки из готовых или из своего фото</p>
+
+    <p class="sec">Режим</p>
+    <div class="modes">
+      <button class="mode-card active" data-mode="puzzle">
+        <span class="ic">🧩</span>
+        <span class="tt">Собери картинку</span>
+        <span class="ds">Перетаскивай кусочки на поле — каждый встаёт на своё место</span>
+      </button>
+      <button class="mode-card" data-mode="shuffle">
+        <span class="ic">🔢</span>
+        <span class="tt">Пятнашки</span>
+        <span class="ds">Нажимай на две клетки — меняй их местами и собери по порядку</span>
+      </button>
+    </div>
+
+    <div class="diff" id="diffShuffle" style="display:none">
+      <span>Сложность</span>
+      <div class="diff-btns">
+        <button class="diff-btn active" data-n="3">3×3</button>
+        <button class="diff-btn" data-n="4">4×4</button>
+        <button class="diff-btn" data-n="5">5×5</button>
+      </div>
+    </div>
+
+    <div class="diff" id="diffPuzzle">
+      <span>Кусочков</span>
+      <div class="diff-btns">
+        <button class="diff-btn active" data-p="12">12</button>
+        <button class="diff-btn" data-p="24">24</button>
+        <button class="diff-btn" data-p="48">48</button>
+      </div>
+    </div>
 
     <div class="hero">
-      <p class="hero-lbl">Твоя картинка</p>
+      <p class="hero-lbl">Картинка</p>
       <div class="hero-row">
         <div class="hero-thumb" id="chosenWrap"><span>🖼</span><img id="chosenThumb" alt=""></div>
         <div class="hero-meta">
@@ -253,39 +293,7 @@
       <button class="primary" id="pickBtn">Выбрать картинку</button>
     </div>
 
-    <p class="sec">Режим</p>
-    <div class="modes">
-      <button class="mode-card active" data-mode="shuffle">
-        <span class="ic">🔢</span>
-        <span class="tt">Пятнашки</span>
-        <span class="ds">Нажимай на две клетки — меняй их местами и собери по порядку</span>
-      </button>
-      <button class="mode-card" data-mode="puzzle">
-        <span class="ic">🧩</span>
-        <span class="tt">Пазл</span>
-        <span class="ds">Перетаскивай кусочки на поле — каждый встаёт на своё место</span>
-      </button>
-    </div>
-
-    <div class="diff" id="diffShuffle">
-      <span>Сложность</span>
-      <div class="diff-btns">
-        <button class="diff-btn active" data-n="3">3×3</button>
-        <button class="diff-btn" data-n="4">4×4</button>
-        <button class="diff-btn" data-n="5">5×5</button>
-      </div>
-    </div>
-
-    <div class="diff" id="diffPuzzle" style="display:none">
-      <span>Кусочков</span>
-      <div class="diff-btns">
-        <button class="diff-btn active" data-p="12">12</button>
-        <button class="diff-btn" data-p="24">24</button>
-        <button class="diff-btn" data-p="48">48</button>
-      </div>
-    </div>
-
-    <button id="startBtn" class="primary big" disabled>Начать</button>
+    <button id="startBtn" class="primary big" disabled>Сначала выбери картинку</button>
     <button id="duetBtn" class="primary big" style="display:none">👥 Играть вдвоём</button>
   </section>
 
@@ -376,10 +384,22 @@
     <button id="backBtn" class="ghost">← Другая картинка</button>
   </section>
 
-  <!-- ЭКРАН: Рейтинг -->
-  <section id="rating" class="screen">
-    <h1>🏆 Рейтинг дня</h1>
-    <p class="sub">Кто быстрее всех собрал сегодняшнюю картинку</p>
+  <!-- ЭКРАН: Картинка дня -->
+  <section id="day" class="screen">
+    <h1>📅 Картинка дня</h1>
+    <p class="sub">Одна картинка для всех. Собери и попади в список.</p>
+
+    <div class="hero">
+      <p class="hero-lbl">Сегодняшняя картинка</p>
+      <div class="hero-row">
+        <div class="hero-thumb" id="dayWrap"><span>🖼</span><img id="dayThumb" alt=""></div>
+        <div class="hero-meta">
+          <div class="hero-t">Картинка дня появится здесь</div>
+          <div class="hero-s">Включим вместе с рейтингом — тогда у всех будет одна картинка</div>
+        </div>
+      </div>
+    </div>
+    <button id="dayPlayBtn" class="primary big" disabled>Собрать картинку дня</button>
 
     <div class="row">
       <span>Период</span>
@@ -398,11 +418,25 @@
       3 секунд в рейтинг не попадают — такие обычно дают скрипты.</p>
   </section>
 
+  <!-- подсказка при первом запуске -->
+  <div id="onb">
+    <div class="onb-card">
+      <div class="onb-ic">🧩</div>
+      <h2>Как играть</h2>
+      <ol class="onb-list">
+        <li>Выбери режим и сложность</li>
+        <li>Возьми картинку — готовую, своё фото или по описанию</li>
+        <li>Собери её и попади в список дня</li>
+      </ol>
+      <button id="onbBtn" class="primary big">Понятно</button>
+    </div>
+  </div>
+
   <!-- нижняя навигация -->
   <nav id="nav">
     <button class="active" data-go="setup"><span class="i">🧩</span>Игра</button>
+    <button data-go="day"><span class="i">📅</span>День</button>
     <button data-go="pics"><span class="i">🖼</span>Картинки</button>
-    <button data-go="rating"><span class="i">🏆</span>Рейтинг</button>
   </nav>
 </div>
 
@@ -502,7 +536,7 @@
   var elapsed = 0, timerId = null, finished = false;
 
   // ---------- режим и сложность ----------
-  var mode = 'shuffle';      // 'shuffle' — пятнашки, 'puzzle' — сборка кусочков
+  var mode = 'puzzle';       // 'puzzle' — сборка кусочков, 'shuffle' — пятнашки
   var psize = 12;            // сколько кусочков выбрано
   var prows = 3, pcols = 4;  // раскладка поля пазла
   var ptotal = 12;           // кусочков на поле
@@ -548,6 +582,8 @@
       sfxPick();
     });
   });
+
+  setDuetVisible();
 
   function setStatus(text, err){
     var st = $('genStatus');
@@ -600,6 +636,7 @@
       $('drop').classList.add('has');
       $('dropText').textContent = '📷 Другое фото';
       $('startBtn').disabled = false;
+      $('startBtn').textContent = 'Начать';
       $('picsStart').disabled = false;
       $('chosenThumb').src = sourceURL;
       $('chosenWrap').classList.add('has');
@@ -620,6 +657,7 @@
     $('dropText').textContent = '📷 Нажми, чтобы выбрать фото';
     $('fileInput').value = '';
     $('startBtn').disabled = true;
+    $('startBtn').textContent = 'Сначала выбери картинку';
     $('picsStart').disabled = true;
     $('chosenThumb').removeAttribute('src');
     $('chosenWrap').classList.remove('has');
@@ -921,6 +959,15 @@
   });
   $('pickBtn').addEventListener('click', function(){ show('pics'); });
 
+  // подсказка при первом запуске
+  try {
+    if (!localStorage.getItem('puzzle_onb')) $('onb').classList.add('on');
+  } catch (e){ $('onb').classList.add('on'); }
+  $('onbBtn').addEventListener('click', function(){
+    $('onb').classList.remove('on');
+    try { localStorage.setItem('puzzle_onb', '1'); } catch(e){}
+  });
+
   // ---------- рейтинг дня ----------
   var ratePeriod = 'today';
 
@@ -1050,11 +1097,11 @@
   });
 
   function show(name){
-    ['setup', 'pics', 'rating', 'game', 'duet'].forEach(function(k){
+    ['setup', 'pics', 'day', 'game', 'duet'].forEach(function(k){
       $(k).classList.toggle('active', k === name);
     });
-    var withNav = (name === 'setup' || name === 'pics' || name === 'rating');
-    if (name === 'rating'){ try { loadRating(); } catch(e){} }
+    var withNav = (name === 'setup' || name === 'pics' || name === 'day');
+    if (name === 'day'){ try { loadRating(); } catch(e){} }
     $('nav').classList.toggle('hide', !withNav);
     document.body.classList.toggle('withnav', withNav);
     $('nav').querySelectorAll('button').forEach(function(b){
