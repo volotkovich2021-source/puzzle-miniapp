@@ -1533,6 +1533,15 @@
     }
     setTimeout(function(){ $('win').classList.add('show'); }, 2000);
     sfxWin(); buzz('win'); confetti();
+    try {
+      var u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
+      var nm = u ? (u.first_name || u.username || '') : '';
+      fetch('/api/report', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({time: elapsed, mode: mode, total: ptotal, name: nm})
+      }).catch(function(){});
+    } catch(e){}
     if (tg && tg.BackButton) { try { tg.BackButton.hide(); } catch(e){} }
   }
 })();

@@ -31,6 +31,30 @@ MAX_PLAYERS = 4      # больше четырёх в одну комнату н
 
 rooms = {}
 
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "791680946").strip()
+
+
+class ReportRequest(BaseModel):
+    time: int
+    mode: str = "puzzle"
+    total: int = 0
+    name: str = ""
+
+
+async def notify_admin(text: str) -> None:
+    """Шлём владельцу короткое сообщение о собранном пазле."""
+    if not BOT_TOKEN or not ADMIN_CHAT_ID:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await client.post(
+                "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage",
+                json={"chat_id": ADMIN_CHAT_ID, "text": text, "parse_mode": "HTML"},
+            )
+    except Exception as exc:
+        print("Уведомление не ушло:", exc)
+
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -115,6 +139,15 @@ async def index():
 
 @app.get("/health")
 async def health():
+    return {"ok": True}
+
+
+@app.post("/api/report")
+async def report(req: ReportRequest):
+    """Игрок собрал пазл — шлём владельцу уведомление в Telegram."""
+    who = (req.name or "").strip() or "Кто-то"
+    what = (str(req.total) + " кусочков") if req.mode == "puzzle" else "пятнашки"
+    await notify_admin("🧩 " + who + " собрал за " + str(req.time) + " сек (" + what + ")")
     return {"ok": True}
 
 
