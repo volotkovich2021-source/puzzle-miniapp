@@ -506,13 +506,19 @@
   var tg = window.Telegram && window.Telegram.WebApp;
   if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
 
-  // код из ссылки-приглашения: ?startapp=1234 — берём и из initData, и из адреса
+  // код из ссылки-приглашения: ?room=1234 (наша кнопка в боте) или startapp=1234
   function readStartParam(){
     var sp = '';
     try {
-      if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param)
-        sp = String(tg.initDataUnsafe.start_param);
+      var m0 = (location.search + '&' + location.hash).match(/[?&#]room=([0-9]{4})/);
+      if (m0) sp = m0[1];
     } catch(e){}
+    if (!/^\d{4}$/.test(sp)){
+      try {
+        if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param)
+          sp = String(tg.initDataUnsafe.start_param);
+      } catch(e){}
+    }
     if (!/^\d{4}$/.test(sp)){
       try {
         var m = (location.search + '&' + location.hash).match(/tgWebAppStartParam=([^&?#]+)/);
@@ -1008,8 +1014,8 @@
   }
 
   $('inviteBtn').addEventListener('click', function(){
-    var url = 'https://t.me/tekst_redaktor_bot/play?startapp=' + net.code;
-    var text = 'Собери со мной пазл — открой ссылку, и играем вдвоём';
+    var url = 'https://t.me/tekst_redaktor_bot?start=r' + net.code;
+    var text = 'Собери со мной пазл — открой ссылку, нажми «Войти в игру», и играем вдвоём';
     if (tg && tg.openTelegramLink){
       try {
         tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(url)

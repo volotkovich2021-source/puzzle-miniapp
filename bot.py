@@ -10,7 +10,6 @@ import os
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
 from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -25,29 +24,63 @@ WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip()
 dp = Dispatcher()
 
 
+def app_url(room: str = "") -> str:
+    """Адрес игры; для комнаты добавляем ?room=КОД."""
+    if not room:
+        return WEBAPP_URL
+    sep = "&" if "?" in WEBAPP_URL else "?"
+    return WEBAPP_URL + sep + "room=" + room
+
+
 def play_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[
             InlineKeyboardButton(
                 text="🧩 Открыть пазл",
-                web_app=WebAppInfo(url=WEBAPP_URL),
+                web_app=WebAppInfo(url=app_url()),
             )
         ]]
     )
 
 
-@dp.message(CommandStart())
-async def on_start(message: Message):
-    await message.answer(
-        "Привет! Собирай пазл из своего фото или сгенерируй картинку по описанию.\n\n"
-        "Выбирай сложность 3×3, 4×4 или 5×5 и собирай.",
-        reply_markup=play_keyboard(),
+def join_keyboard(code: str) -> InlineKeyboardMarkup:
+    """Кнопка, которая открывает игру сразу с кодом комнаты друга."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(
+                text="🧩 Войти в игру",
+                web_app=WebAppInfo(url=app_url(code)),
+            )
+        ]]
     )
+
+
+def room_code_from(text: str) -> str:
+    """Достаём код комнаты из ссылки-приглашения: /start r1234."""
+    parts = text.split(maxsplit=1)
+    payload = parts[1].strip() if len(parts) > 1 else ""
+    if len(payload) == 5 and payload[0] == "r" and payload[1:].isdigit():
+        return payload[1:]
+    return ""
 
 
 @dp.message()
 async def on_any(message: Message):
-    await message.answer("Нажми кнопку ниже, чтобы играть.", reply_markup=play_keyboard())
+    text = (message.text or "").strip()
+    if text.startswith("/start"):
+        code = room_code_from(text)
+        if code:
+            await message.answer(
+                "Тебя позвали играть вдвоём 🧩\n\n"
+                "Нажми кнопку ниже — и попадёшь в игру друга.",
+                reply_markup=join_keyboard(code),
+            )
+            return
+    await message.answer(
+        "Привет! Собирай пазл из своего фото или сгенерируй картинку по описанию.\n\n"
+        "Выбирай режим, сложность и картинку — потом собирай.",
+        reply_markup=play_keyboard(),
+    )
 
 
 async def main():
