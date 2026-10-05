@@ -506,6 +506,23 @@
   var tg = window.Telegram && window.Telegram.WebApp;
   if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
 
+  // код из ссылки-приглашения: ?startapp=1234 — берём и из initData, и из адреса
+  function readStartParam(){
+    var sp = '';
+    try {
+      if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param)
+        sp = String(tg.initDataUnsafe.start_param);
+    } catch(e){}
+    if (!/^\d{4}$/.test(sp)){
+      try {
+        var m = (location.search + '&' + location.hash).match(/tgWebAppStartParam=([^&?#]+)/);
+        if (m) sp = decodeURIComponent(m[1]);
+      } catch(e){}
+    }
+    return /^\d{4}$/.test(sp) ? sp : '';
+  }
+  var INVITE = readStartParam();
+
   var $ = function(id){ return document.getElementById(id); };
 
   // ---------- звук и вибрация ----------
@@ -842,9 +859,13 @@
       $('waitStatus').textContent = 'Вхожу в игру…';
       openRoom(code, false, data.state);
     }).catch(function(err){
-      $('joinStatus').textContent = (err.message === 'notfound')
-        ? 'Такой комнаты нет — проверь код'
+      var msg = (err.message === 'notfound')
+        ? 'Такой комнаты нет — проверь код или попроси новую ссылку'
         : 'Не получилось войти. Попробуй ещё раз.';
+      $('joinStatus').textContent = msg;
+      $('waitStatus').textContent = msg;
+      $('duetStart').style.display = 'block';
+      $('duetWait').style.display = 'none';
     });
   }
 
@@ -887,6 +908,10 @@
         $('waitStatus').textContent = 'В комнате уже максимум игроков';
         leaveRoom();
       }
+    };
+    net.ws.onclose = function(){
+      if (!net.on || net.playing) return;
+      $('waitStatus').textContent = 'Связь с игрой прервалась. Создай игру заново или попроси новую ссылку.';
     };
   }
 
@@ -1012,10 +1037,12 @@
   });
   $('pickBtn').addEventListener('click', function(){ show('pics'); });
 
-  // подсказка при первом запуске
-  try {
-    if (!localStorage.getItem('puzzle_onb')) $('onb').classList.add('on');
-  } catch (e){ $('onb').classList.add('on'); }
+  // подсказка при первом запуске (по ссылке-приглашению не мешаем — сразу в игру)
+  if (!INVITE){
+    try {
+      if (!localStorage.getItem('puzzle_onb')) $('onb').classList.add('on');
+    } catch (e){ $('onb').classList.add('on'); }
+  }
   $('onbBtn').addEventListener('click', function(){
     $('onb').classList.remove('on');
     try { localStorage.setItem('puzzle_onb', '1'); } catch(e){}
@@ -1105,16 +1132,17 @@
   // вход по ссылке-приглашению: ?startapp=1234
   (function(){
     try {
-      var sp = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
-      if (!/^\d{4}$/.test(sp)) return;
+      var sp = INVITE;
+      if (!sp) return;
       mode = 'puzzle';
       document.querySelectorAll('.mode-card').forEach(function(x){
         x.classList.toggle('active', x.dataset.mode === 'puzzle');
       });
       $('diffShuffle').style.display = 'none';
       $('diffPuzzle').style.display = 'block';
-      $('duetStart').style.display = 'none';
-      $('duetWait').style.display = 'block';
+      // показываем экран поиска, чтобы было видно и «ищу», и ошибку
+      $('duetStart').style.display = 'block';
+      $('duetWait').style.display = 'none';
       $('codeShow').textContent = sp;
       $('waitStatus').textContent = 'Вхожу в игру…';
       show('duet');
