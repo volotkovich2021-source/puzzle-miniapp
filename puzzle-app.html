@@ -146,6 +146,10 @@
   .how{background:var(--card); border-radius:12px; padding:12px 14px; margin-bottom:14px;}
   .how p{margin:6px 0; line-height:1.5; font-size:14px; color:var(--muted);}
   .how b{color:var(--text);}
+  .duet-pic{display:flex; align-items:center; gap:12px; background:var(--card); border-radius:12px;
+    padding:10px 12px; margin:0 0 14px;}
+  .duet-pic img{width:56px; height:56px; border-radius:10px; object-fit:cover; display:block; background:var(--card2);}
+  .duet-pic span{font-size:14px; color:var(--muted); line-height:1.4;}
   .code-show{font-size:46px; letter-spacing:.16em; font-weight:800; text-align:center;
     background:var(--card); border-radius:14px; padding:14px 0; margin:6px 0 12px;
     font-variant-numeric:tabular-nums; color:#fff;}
@@ -372,6 +376,7 @@
     </div>
 
     <div class="sticky">
+      <p class="status" id="picsWhy" style="text-align:center; margin:0 0 8px"></p>
       <button id="picsStart" class="primary big" disabled>Играть с этой картинкой</button>
     </div>
   </section>
@@ -381,8 +386,13 @@
     <p class="sub">Вы с другом собираете одну картинку вместе — ход одного сразу видит другой</p>
 
     <div id="duetStart">
-      <div class="how">
-        <p><b>1.</b> Выбери картинку на вкладке «Картинки»</p>
+      <div class="duet-pic" id="duetPicRow" style="display:none">
+        <img id="duetThumb" alt="">
+        <span>Картинка выбрана — можно создавать игру</span>
+      </div>
+
+      <div class="how" id="duetHow">
+        <p><b>1.</b> Выбери картинку — кнопка ниже</p>
         <p><b>2.</b> Нажми «Создать игру» — получишь ссылку с кодом</p>
         <p><b>3.</b> Отправь ссылку другу — он откроет и подключится сам</p>
       </div>
@@ -601,6 +611,7 @@
   // ---------- состояние ----------
   var n = 3;                 // размер сетки
   var sourceURL = null;      // квадратная картинка (dataURL или blob)
+  var pickFor = 'solo';      // откуда пришли выбирать картинку: 'solo' или 'duet'
   var tiles = [];            // tiles[позиция] = индекс фрагмента
   var sel = -1;              // выбранная клетка
   var moves = 0;
@@ -798,20 +809,26 @@
     return a;
   }
 
-  $('duetBtn').addEventListener('click', function(){
+  function openDuet(){
     $('duetStart').style.display = 'block';
     $('duetWait').style.display = 'none';
     var has = !!sourceURL;
     $('createRoomBtn').disabled = !has;
     $('needPic').style.display = has ? 'none' : 'block';
-    $('pickPicBtn').style.display = has ? 'none' : 'block';
+    $('duetHow').style.display = has ? 'none' : 'block';
+    $('duetPicRow').style.display = has ? 'flex' : 'none';
+    if (has) $('duetThumb').src = sourceURL;
+    $('pickPicBtn').style.display = 'block';
+    $('pickPicBtn').textContent = has ? '🖼 Другая картинка' : '🖼 Выбрать картинку';
     $('createStatus').textContent = '';
     $('joinStatus').textContent = '';
     $('codeInput').value = '';
     show('duet');
-  });
+  }
 
-  $('pickPicBtn').addEventListener('click', function(){ show('pics'); });
+  $('duetBtn').addEventListener('click', openDuet);
+
+  $('pickPicBtn').addEventListener('click', function(){ showPics('duet'); });
 
   $('duetBackBtn').addEventListener('click', function(){
     leaveRoom();
@@ -1039,9 +1056,24 @@
   // нижние вкладки
   document.body.classList.add('withnav');
   $('nav').querySelectorAll('button').forEach(function(b){
-    b.addEventListener('click', function(){ show(b.dataset.go); });
+    b.addEventListener('click', function(){
+      if (b.dataset.go === 'pics') showPics('solo');
+      else show(b.dataset.go);
+    });
   });
-  $('pickBtn').addEventListener('click', function(){ show('pics'); });
+  $('pickBtn').addEventListener('click', function(){ showPics('solo'); });
+
+  // экран «Картинки»: помним, зачем пришли — собрать одному или создать игру вдвоём
+  function showPics(forWho){
+    pickFor = (forWho === 'duet') ? 'duet' : 'solo';
+    $('picsStart').textContent = (pickFor === 'duet')
+      ? '👥 Создать игру с этой картинкой'
+      : 'Играть с этой картинкой';
+    $('picsWhy').textContent = (pickFor === 'duet')
+      ? 'Для игры вдвоём: выбери картинку — и сразу создадим игру для тебя и друга'
+      : '';
+    show('pics');
+  }
 
   // подсказка при первом запуске (по ссылке-приглашению не мешаем — сразу в игру)
   if (!INVITE){
@@ -1111,6 +1143,11 @@
 
   $('picsStart').addEventListener('click', function(){
     if (!sourceURL) return;
+    if (pickFor === 'duet'){
+      openDuet();
+      $('createRoomBtn').click();
+      return;
+    }
     net.on = false;
     $('peekImg').src = sourceURL;
     show('game');
@@ -1132,7 +1169,7 @@
   $('backBtn').addEventListener('click', function(){
     stopTimer();
     leaveRoom();
-    show('pics');
+    showPics('solo');
   });
 
   // вход по ссылке-приглашению: ?startapp=1234
@@ -1180,7 +1217,7 @@
     $('win').classList.remove('show');
     stopTimer();
     leaveRoom();
-    show('pics');
+    showPics('solo');
   });
 
   function show(name){
