@@ -59,6 +59,18 @@
   .diff-btn{border:1px solid var(--line); background:var(--card); color:var(--muted);
     padding:9px 14px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;}
   .diff-btn.active{border-color:var(--accent); color:var(--text); background:var(--card2);}
+  .pieces{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .pieces .diff-btn{display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:10px 6px 12px;}
+  .pgrid{width:100%; height:46px; border-radius:8px; border:1px solid var(--line);
+    background-color:var(--card2);
+    background-image:
+      linear-gradient(to right, rgba(143,163,184,.55) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(143,163,184,.55) 1px, transparent 1px);
+    background-size:calc(100% / var(--c)) calc(100% / var(--r));}
+  .diff-btn.active .pgrid{border-color:var(--accent);}
+  .p-name{font-size:13px; font-weight:700;}
+  .p-num{font-size:11px; opacity:.75;}
 
   .hud{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
   .hud .chip{background:var(--card); border-radius:10px; padding:8px 12px; font-size:14px;
@@ -131,6 +143,9 @@
   .modes-title{color:var(--muted); font-size:13px; letter-spacing:.08em; text-transform:uppercase;
     text-align:center; margin:22px 0 10px; font-weight:700;}
   .modes{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .how{background:var(--card); border-radius:12px; padding:12px 14px; margin-bottom:14px;}
+  .how p{margin:6px 0; line-height:1.5; font-size:14px; color:var(--muted);}
+  .how b{color:var(--text);}
   .code-show{font-size:46px; letter-spacing:.16em; font-weight:800; text-align:center;
     background:var(--card); border-radius:14px; padding:14px 0; margin:6px 0 12px;
     font-variant-numeric:tabular-nums; color:#fff;}
@@ -263,21 +278,45 @@
       </button>
     </div>
 
-    <div class="diff" id="diffShuffle" style="display:none">
-      <span>Сложность</span>
-      <div class="diff-btns">
-        <button class="diff-btn active" data-n="3">3×3</button>
-        <button class="diff-btn" data-n="4">4×4</button>
-        <button class="diff-btn" data-n="5">5×5</button>
+    <div id="diffShuffle" style="display:none">
+      <p class="sec">Размер поля</p>
+      <div class="pieces">
+        <button class="diff-btn active" data-n="3">
+          <span class="pgrid" style="--c:3; --r:3"></span>
+          <span class="p-name">Лёгкий</span>
+          <span class="p-num">3 × 3</span>
+        </button>
+        <button class="diff-btn" data-n="4">
+          <span class="pgrid" style="--c:4; --r:4"></span>
+          <span class="p-name">Средний</span>
+          <span class="p-num">4 × 4</span>
+        </button>
+        <button class="diff-btn" data-n="5">
+          <span class="pgrid" style="--c:5; --r:5"></span>
+          <span class="p-name">Сложный</span>
+          <span class="p-num">5 × 5</span>
+        </button>
       </div>
     </div>
 
-    <div class="diff" id="diffPuzzle">
-      <span>Кусочков</span>
-      <div class="diff-btns">
-        <button class="diff-btn active" data-p="12">12</button>
-        <button class="diff-btn" data-p="24">24</button>
-        <button class="diff-btn" data-p="48">48</button>
+    <div id="diffPuzzle">
+      <p class="sec">Сколько кусочков</p>
+      <div class="pieces">
+        <button class="diff-btn active" data-p="12">
+          <span class="pgrid" style="--c:4; --r:3"></span>
+          <span class="p-name">Лёгкий</span>
+          <span class="p-num">12 кусочков</span>
+        </button>
+        <button class="diff-btn" data-p="24">
+          <span class="pgrid" style="--c:6; --r:4"></span>
+          <span class="p-name">Средний</span>
+          <span class="p-num">24 кусочка</span>
+        </button>
+        <button class="diff-btn" data-p="48">
+          <span class="pgrid" style="--c:8; --r:6"></span>
+          <span class="p-name">Сложный</span>
+          <span class="p-num">48 кусочков</span>
+        </button>
       </div>
     </div>
 
@@ -339,25 +378,34 @@
 
   <section id="duet" class="screen">
     <h1>👥 Игра вдвоём</h1>
-    <p class="sub">Собирайте одну картинку вместе</p>
+    <p class="sub">Вы с другом собираете одну картинку вместе — ход одного сразу видит другой</p>
 
     <div id="duetStart">
-      <button id="createRoomBtn" class="primary big">Создать комнату</button>
+      <div class="how">
+        <p><b>1.</b> Выбери картинку на вкладке «Картинки»</p>
+        <p><b>2.</b> Нажми «Создать игру» — получишь ссылку с кодом</p>
+        <p><b>3.</b> Отправь ссылку другу — он откроет и подключится сам</p>
+      </div>
+
+      <p class="status" id="needPic" style="display:none">Сначала выбери картинку — без неё игру не создать.</p>
+      <button id="pickPicBtn" class="ghost" style="display:none">🖼 Выбрать картинку</button>
+
+      <button id="createRoomBtn" class="primary big">Создать игру</button>
       <p class="status" id="createStatus"></p>
 
-      <p class="modes-title">Или войди по коду друга</p>
+      <p class="modes-title">Уже есть код от друга?</p>
       <input id="codeInput" type="text" inputmode="numeric" maxlength="4" placeholder="4 цифры"
              autocomplete="off">
-      <button id="joinRoomBtn" class="primary">Войти в комнату</button>
+      <button id="joinRoomBtn" class="primary">Войти по коду</button>
       <p class="status" id="joinStatus"></p>
     </div>
 
     <div id="duetWait" style="display:none">
-      <p class="modes-title">Код комнаты</p>
+      <p class="modes-title">Ссылка для друга</p>
       <div class="code-show" id="codeShow">----</div>
-      <button id="inviteBtn" class="primary">📨 Позвать друга</button>
+      <button id="inviteBtn" class="primary">📨 Отправить другу ссылку</button>
       <button id="copyCodeBtn" class="ghost">Скопировать код</button>
-      <p class="status" id="waitStatus">Ждём второго игрока…</p>
+      <p class="status" id="waitStatus">Ждём друга — как только он откроет ссылку, игра начнётся сама</p>
     </div>
 
     <button class="ghost" id="duetBackBtn">← Назад</button>
@@ -426,7 +474,7 @@
       <ol class="onb-list">
         <li>Выбери режим и сложность</li>
         <li>Возьми картинку — готовую, своё фото или по описанию</li>
-        <li>Собери её и попади в список дня</li>
+        <li>Собери её — и увидишь свой результат</li>
       </ol>
       <button id="onbBtn" class="primary big">Понятно</button>
     </div>
@@ -576,8 +624,8 @@
       document.querySelectorAll('.mode-card').forEach(function(x){ x.classList.remove('active'); });
       b.classList.add('active');
       mode = b.dataset.mode;
-      $('diffShuffle').style.display = (mode === 'shuffle') ? 'flex' : 'none';
-      $('diffPuzzle').style.display = (mode === 'puzzle') ? 'flex' : 'none';
+      $('diffShuffle').style.display = (mode === 'shuffle') ? 'block' : 'none';
+      $('diffPuzzle').style.display = (mode === 'puzzle') ? 'block' : 'none';
       setDuetVisible();
       sfxPick();
     });
@@ -730,12 +778,17 @@
   $('duetBtn').addEventListener('click', function(){
     $('duetStart').style.display = 'block';
     $('duetWait').style.display = 'none';
-    $('createRoomBtn').disabled = !sourceURL;
-    $('createStatus').textContent = sourceURL ? '' : 'Сначала выбери картинку';
+    var has = !!sourceURL;
+    $('createRoomBtn').disabled = !has;
+    $('needPic').style.display = has ? 'none' : 'block';
+    $('pickPicBtn').style.display = has ? 'none' : 'block';
+    $('createStatus').textContent = '';
     $('joinStatus').textContent = '';
     $('codeInput').value = '';
     show('duet');
   });
+
+  $('pickPicBtn').addEventListener('click', function(){ show('pics'); });
 
   $('duetBackBtn').addEventListener('click', function(){
     leaveRoom();
@@ -748,7 +801,7 @@
     var rows = lay.rows, cols = lay.cols;
     var e = randomEdges(rows, cols);
     $('createRoomBtn').disabled = true;
-    $('createStatus').textContent = 'Создаю комнату…';
+    $('createStatus').textContent = 'Создаю игру…';
     fetch('/api/room/create', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -786,7 +839,7 @@
       $('duetStart').style.display = 'none';
       $('duetWait').style.display = 'block';
       $('codeShow').textContent = code;
-      $('waitStatus').textContent = 'Вхожу в комнату…';
+      $('waitStatus').textContent = 'Вхожу в игру…';
       openRoom(code, false, data.state);
     }).catch(function(err){
       $('joinStatus').textContent = (err.message === 'notfound')
@@ -805,7 +858,7 @@
     leaveRoom();
     net.on = true; net.host = !!host; net.code = code;
     net.count = 1; net.playing = false; net.lastState = state || null;
-    $('waitStatus').textContent = host ? 'Ждём второго игрока…' : 'Вхожу…';
+    $('waitStatus').textContent = host ? 'Ждём друга — как только он откроет ссылку, игра начнётся сама' : 'Вхожу…';
     var proto = (location.protocol === 'https:') ? 'wss://' : 'ws://';
     try {
       net.ws = new WebSocket(proto + location.host + '/ws/room/' + code);
@@ -931,7 +984,7 @@
 
   $('inviteBtn').addEventListener('click', function(){
     var url = 'https://t.me/tekst_redaktor_bot/play?startapp=' + net.code;
-    var text = 'Собери со мной пазл! Код комнаты: ' + net.code;
+    var text = 'Собери со мной пазл — открой ссылку, и играем вдвоём';
     if (tg && tg.openTelegramLink){
       try {
         tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(url)
@@ -1059,11 +1112,11 @@
         x.classList.toggle('active', x.dataset.mode === 'puzzle');
       });
       $('diffShuffle').style.display = 'none';
-      $('diffPuzzle').style.display = 'flex';
+      $('diffPuzzle').style.display = 'block';
       $('duetStart').style.display = 'none';
       $('duetWait').style.display = 'block';
       $('codeShow').textContent = sp;
-      $('waitStatus').textContent = 'Вхожу в комнату…';
+      $('waitStatus').textContent = 'Вхожу в игру…';
       show('duet');
       joinRoom(sp);
     } catch (e){}
