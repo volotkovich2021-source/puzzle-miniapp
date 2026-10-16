@@ -176,9 +176,20 @@
   .slot .piece{position:absolute; right:auto; bottom:auto; left:-20%; top:-20%;
     width:140%; height:140%; box-shadow:none; border-radius:0; cursor:default;}
 
-  .tray{display:none; flex-wrap:wrap; gap:6px; margin-top:12px; min-height:84px;
-    background:var(--card); border-radius:12px; padding:8px; touch-action:none;}
+  .tray{display:none; flex-wrap:wrap; gap:7px; margin-top:10px; min-height:90px;
+    background:var(--card); border-radius:12px; padding:9px; touch-action:pan-y;
+    align-content:flex-start;}
   .tray.on{display:flex;}
+  /* экран игры: ровно в размер экрана, прокручивается только лоток с кусочками */
+  #game.active{display:flex; flex-direction:column;
+    height:calc(100vh - 32px - env(safe-area-inset-top));
+    height:calc(100dvh - 32px - env(safe-area-inset-top));
+    overflow:hidden;}
+  #game .hud{flex:0 0 auto;}
+  #game .board-wrap{flex:0 0 auto; width:min(100%, 56dvh); margin:0 auto 10px;}
+  #game .tray{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;}
+  #game #backBtn{flex:0 0 auto; margin-top:0;}
   .tray:empty::after{content:'кусочки разложены'; color:var(--muted); font-size:13px;
     margin:auto;}
   .piece{background-repeat:no-repeat; background-size:100% 100%; cursor:grab; touch-action:none;
@@ -750,16 +761,30 @@
     if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.selectionChanged(); } catch(e){} }
   });
 
-  // обрезаем по центру в квадрат, чтобы фрагменты были ровными
+  // приводим картинку к квадрату, но НЕ обрезаем: фото вписываем целиком,
+  // а поля по бокам заливаем его же размытой копией
   function squareDataURL(img, size){
     var c = document.createElement('canvas');
     c.width = c.height = size;
     var ctx = c.getContext('2d');
-    var side = Math.min(img.naturalWidth, img.naturalHeight) || size;
-    var sx = (img.naturalWidth - side) / 2;
-    var sy = (img.naturalHeight - side) / 2;
-    ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
-    return c.toDataURL('image/jpeg', 0.9);
+    var iw = img.naturalWidth || size;
+    var ih = img.naturalHeight || size;
+
+    // фон: сильно уменьшенная копия, растянутая обратно — получается мягкое размытие
+    var mini = document.createElement('canvas');
+    mini.width = mini.height = 40;
+    var mctx = mini.getContext('2d');
+    var k = Math.max(40 / iw, 40 / ih);
+    mctx.drawImage(img, (40 - iw * k) / 2, (40 - ih * k) / 2, iw * k, ih * k);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(mini, 0, 0, 40, 40, 0, 0, size, size);
+
+    // сама картинка — целиком, по центру
+    var fit = Math.min(size / iw, size / ih);
+    var w = iw * fit, h = ih * fit;
+    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+    return c.toDataURL('image/jpeg', 0.92);
   }
   // ---------- запуск игры ----------
   $('startBtn').addEventListener('click', function(){
@@ -979,7 +1004,7 @@
       for (var i = 0; i < ptotal; i++){
         pieceURLs.push(pieceImage(Math.floor(i / pcols), i % pcols));
       }
-      var size = trayPieceSize(), k, idx;
+      var size = trayPieceSize(ptotal), k, idx;
       for (k in net.placed){
         idx = parseInt(k, 10);
         putInSlot(makePiece(idx, size), slotEls[net.placed[k]]);
@@ -1529,12 +1554,19 @@
     }
   }
 
-  function trayPieceSize(){
+  // подбираем размер кусочка так, чтобы все поместились в лоток без прокрутки
+  function trayPieceSize(total){
     var tray = $('tray');
-    var w = tray.clientWidth || 320;
-    var per = 5;                                   // кусочков в ряд
-    var size = Math.floor((w - 6 * (per + 1)) / (per * (1 + 2 * PADR)));
-    return Math.max(30, Math.min(56, size));
+    var W = tray.clientWidth || 320;
+    var H = tray.clientHeight || 200;
+    var gap = 7, n = total || ptotal || 12, best = 24, w, full, per, rows;
+    for (w = 24; w <= 54; w++){
+      full = w * (1 + 2 * PADR);
+      per = Math.max(1, Math.floor((W - gap * 2) / (full + gap)));
+      rows = Math.ceil(n / per);
+      if (rows * (full + gap) <= H + 6) best = w;
+    }
+    return best;
   }
 
   function makePiece(idx, w){
@@ -1552,7 +1584,7 @@
   function buildTray(){
     var tray = $('tray');
     tray.innerHTML = '';
-    var size = trayPieceSize();
+    var size = trayPieceSize(ptotal);
     var order = [], i, j, t;
     for (i = 0; i < ptotal; i++) order.push(i);
     for (i = order.length - 1; i > 0; i--){
@@ -1643,7 +1675,7 @@
   }
 
   function sendBack(el){
-    var size = Math.round(trayPieceSize() * (1 + 2 * PADR));
+    var size = Math.round(trayPieceSize(ptotal) * (1 + 2 * PADR));
     el.classList.remove('drag');
     el.style.left = ''; el.style.top = '';
     el.style.width = size + 'px';
