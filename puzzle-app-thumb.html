@@ -1,0 +1,2075 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Пазл</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{
+    --bg:#17212b; --card:#1f2c3a; --card2:#243447; --line:#2e4055;
+    --text:#eaf1f8; --muted:#8fa3b8; --accent:#4aa3ff; --accent2:#2f8ce0;
+    --ok:#3ddc97;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text); overscroll-behavior:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  body{min-height:100vh; display:flex; justify-content:center;}
+  #app{width:100%; max-width:520px; padding:16px; padding-top:calc(16px + env(safe-area-inset-top));}
+  .screen{display:none;}
+  .screen.active{display:block;}
+
+  h1{font-size:28px; margin:8px 0 4px; text-align:center;}
+  .sub{color:var(--muted); text-align:center; margin:0 0 20px; font-size:14px;}
+
+  .tabs{display:flex; background:var(--card); border-radius:12px; padding:4px; margin-bottom:14px;}
+  .tab{flex:1; border:0; background:transparent; color:var(--muted); font-size:15px;
+    padding:10px; border-radius:9px; cursor:pointer; font-weight:600;}
+  .tab.active{background:var(--card2); color:var(--text);}
+
+  .pane{display:none;}
+  .pane.active{display:block;}
+
+  .picgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px;}
+  .picgrid button{padding:0; border:1px solid var(--line); border-radius:12px; overflow:hidden;
+    background:var(--card); cursor:pointer; position:relative; aspect-ratio:1 / 1;}
+  .picgrid button img{width:100%; height:100%; object-fit:cover; display:block;}
+  .picgrid button.sel{border-color:var(--accent);}
+  .picgrid button:active{transform:scale(.97);}
+
+  .drop{display:flex; align-items:center; justify-content:center; gap:10px;
+    min-height:110px; background:var(--card); border:2px dashed var(--line);
+    border-radius:14px; color:var(--muted); cursor:pointer; text-align:center; padding:16px;
+    font-size:15px;}
+  .drop.has{border-style:solid; border-color:var(--accent); color:var(--text);}
+  #previewWrap{display:none; margin-top:12px; text-align:center;}
+  #preview{max-width:100%; max-height:180px; border-radius:12px; display:block; margin:0 auto;}
+
+  input[type=text]{width:100%; padding:14px; border-radius:12px; border:1px solid var(--line);
+    background:var(--card); color:var(--text); font-size:15px; outline:none;}
+  input[type=text]:focus{border-color:var(--accent);}
+
+  button.primary{width:100%; margin-top:12px; padding:14px; border:0; border-radius:12px;
+    background:linear-gradient(180deg,var(--accent),var(--accent2)); color:#fff;
+    font-size:16px; font-weight:700; cursor:pointer;}
+  button.primary:disabled{opacity:.4; cursor:default;}
+  button.big{font-size:17px; padding:16px;}
+  button.ghost{width:100%; margin-top:10px; padding:12px; border:0; border-radius:12px;
+    background:transparent; color:var(--muted); font-size:15px; cursor:pointer;}
+
+  .status{color:var(--muted); font-size:13px; margin-top:8px; min-height:18px;}
+  .status.err{color:#ff8080;}
+
+  .diff{margin-top:20px; display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .diff span{color:var(--muted); font-size:14px;}
+  .diff-btns{display:flex; gap:8px;}
+  .diff-btn{border:1px solid var(--line); background:var(--card); color:var(--muted);
+    padding:9px 14px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;}
+  .diff-btn.active{border-color:var(--accent); color:var(--text); background:var(--card2);}
+  .pieces{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .pieces .diff-btn{display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:10px 6px 12px;}
+  .pgrid{width:100%; height:46px; border-radius:8px; border:1px solid var(--line);
+    background-color:var(--card2);
+    background-image:
+      linear-gradient(to right, rgba(143,163,184,.55) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(143,163,184,.55) 1px, transparent 1px);
+    background-size:calc(100% / var(--c)) calc(100% / var(--r));}
+  .diff-btn.active .pgrid{border-color:var(--accent);}
+  .p-name{font-size:13px; font-weight:700;}
+  .p-num{font-size:11px; opacity:.75;}
+
+  .hud{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .hud .chip{background:var(--card); border-radius:10px; padding:8px 12px; font-size:14px;
+    font-weight:600; font-variant-numeric:tabular-nums;}
+  .hud .spacer{flex:1;}
+  .hud button{border:0; background:var(--card); color:var(--text); border-radius:10px;
+    padding:8px 12px; font-size:15px; cursor:pointer; font-weight:600;}
+
+  .board-wrap{position:relative; width:100%; aspect-ratio:1/1; border-radius:14px; overflow:hidden;
+    background:var(--card); touch-action:none;}
+  #peekImg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
+  #board{position:relative; z-index:1; width:100%; height:100%; display:grid; gap:2px;
+    background:var(--line); transition:opacity .12s;}
+  .cell{background-repeat:no-repeat; cursor:pointer;
+    outline:3px solid transparent; outline-offset:-3px;}
+  .cell.sel{outline-color:var(--accent);}
+  .cell.done{outline:1px solid rgba(61,220,151,.35); outline-offset:-1px;}
+
+  .overlay{position:fixed; inset:0; background:rgba(10,16,24,.86); display:flex; opacity:0; visibility:hidden; transition:opacity .25s ease, visibility .25s;
+    align-items:center; justify-content:center; z-index:50; padding:20px;}
+  .overlay.show{opacity:1; visibility:visible;}
+  .win-card{background:var(--card); border-radius:18px; padding:26px 22px; width:100%;
+    max-width:340px; text-align:center;}
+  .win-emoji{font-size:48px;}
+  .win-card h2{margin:6px 0; font-size:24px;}
+  .win-card p{color:var(--muted); margin:0 0 6px; font-size:15px;}
+
+  /* ---------- живость: анимации ---------- */
+  .cell{transition:transform .12s ease, outline-color .12s ease;}
+  .cell.sel{animation:selPulse .9s ease-in-out infinite;}
+  @keyframes selPulse{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(.93);}
+  }
+  .cell.appear{animation:appear .28s ease both;}
+  @keyframes appear{
+    from{opacity:0; transform:scale(.55);}
+    to{opacity:1; transform:scale(1);}
+  }
+  .cell.snap{animation:snap .45s ease;}
+  @keyframes snap{
+    0%{transform:scale(1); filter:brightness(1);}
+    35%{transform:scale(1.12); filter:brightness(1.4);}
+    100%{transform:scale(1); filter:brightness(1);}
+  }
+  .chip.bump{animation:bump .3s ease;}
+  @keyframes bump{
+    0%{transform:scale(1);}
+    40%{transform:scale(1.15);}
+    100%{transform:scale(1);}
+  }
+  .overlay.show .win-card{animation:cardIn .45s cubic-bezier(.2,1.4,.5,1) both;}
+  @keyframes cardIn{
+    from{opacity:0; transform:scale(.8) translateY(16px);}
+    to{opacity:1; transform:scale(1) translateY(0);}
+  }
+  #win.show .win-emoji{animation:emojiPop .7s ease;}
+  @keyframes emojiPop{
+    0%{transform:scale(.3) rotate(-25deg);}
+    60%{transform:scale(1.25) rotate(10deg);}
+    100%{transform:scale(1) rotate(0);}
+  }
+  .confetti{position:fixed; top:-40px; font-size:22px; pointer-events:none; z-index:60;
+    animation:fall linear forwards;}
+  @keyframes fall{
+    to{transform:translateY(115vh) rotate(360deg); opacity:.15;}
+  }
+
+  /* ---------- режим «Пазл» ---------- */
+  .modes-title{color:var(--muted); font-size:13px; letter-spacing:.08em; text-transform:uppercase;
+    text-align:center; margin:22px 0 10px; font-weight:700;}
+  .modes{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .how{background:var(--card); border-radius:12px; padding:12px 14px; margin-bottom:14px;}
+  .how p{margin:6px 0; line-height:1.5; font-size:14px; color:var(--muted);}
+  .how b{color:var(--text);}
+  .duet-pic{display:flex; align-items:center; gap:12px; background:var(--card); border-radius:12px;
+    padding:10px 12px; margin:0 0 14px;}
+  .duet-pic img{width:56px; height:56px; border-radius:10px; object-fit:cover; display:block; background:var(--card2);}
+  .duet-pic span{font-size:14px; color:var(--muted); line-height:1.4;}
+  .code-show{font-size:46px; letter-spacing:.16em; font-weight:800; text-align:center;
+    background:var(--card); border-radius:14px; padding:14px 0; margin:6px 0 12px;
+    font-variant-numeric:tabular-nums; color:#fff;}
+  .mode-card{border:2px solid var(--line); background:var(--card); color:var(--text);
+    border-radius:16px; padding:18px 10px 16px; min-height:150px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    font-family:inherit; text-align:center; transition:transform .12s ease, border-color .12s ease;}
+  .mode-card:active{transform:scale(.97);}
+  .mode-card .ic{font-size:40px; line-height:1;}
+  .mode-card .tt{font-size:18px; font-weight:800;}
+  .mode-card .ds{font-size:12.5px; line-height:1.35; color:var(--muted);}
+  .mode-card.active{border-color:var(--accent); background:var(--card2);
+    box-shadow:0 0 0 3px rgba(74,163,255,.16);}
+  .mode-card.active .tt{color:#fff;}
+  .mode-card.active .ds{color:var(--text);}
+
+  #puzzleBoard{position:absolute; inset:0; z-index:2; display:none; gap:0;
+    background:transparent; touch-action:none;}
+  #puzzleBoard.on{display:grid;}
+  .slot{background-repeat:no-repeat; background-color:rgba(255,255,255,.06); border-radius:3px;
+    outline:1px dashed rgba(255,255,255,.10); outline-offset:-1px; position:relative;}
+  .slot.done{outline-color:transparent; outline-style:none;}
+  .slot.hot{outline:2px solid var(--accent); outline-offset:-2px; outline-style:solid;}
+  .slot .piece{position:absolute; right:auto; bottom:auto; left:-20%; top:-20%;
+    width:140%; height:140%; box-shadow:none; border-radius:0; cursor:default;}
+
+  .tray{display:none; flex-wrap:wrap; gap:7px; margin-top:10px; min-height:90px;
+    background:var(--card); border-radius:12px; padding:9px; touch-action:pan-y;
+    align-content:flex-start;}
+  .tray.on{display:flex;}
+  /* экран игры: ровно в размер экрана, прокручивается только лоток с кусочками */
+  #game.active{display:flex; flex-direction:column;
+    height:calc(100vh - 32px - env(safe-area-inset-top));
+    height:calc(100dvh - 32px - env(safe-area-inset-top));
+    overflow:hidden;}
+  #game .hud{flex:0 0 auto;}
+  #game .board-wrap{flex:0 0 auto; width:min(100%, 56dvh); margin:0 auto 10px;}
+  #game .tray{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;}
+  #game #backBtn{flex:0 0 auto; margin-top:0;}
+  .tray:empty::after{content:'кусочки разложены'; color:var(--muted); font-size:13px;
+    margin:auto;}
+  .piece{background-repeat:no-repeat; background-size:100% 100%; cursor:grab; touch-action:none;
+    filter:drop-shadow(0 2px 2px rgba(0,0,0,.45)); will-change:left,top;}
+  .piece.drag{position:fixed; z-index:70; cursor:grabbing; transform:scale(1.08);
+    filter:drop-shadow(0 8px 14px rgba(0,0,0,.6)); pointer-events:none;}
+  .piece.back{transition:left .16s ease, top .16s ease;}
+  @keyframes popin{
+    from{opacity:0; transform:scale(.7);}
+    to{opacity:1; transform:scale(1);}
+  }
+  .tray .piece{animation:popin .22s ease both;}
+  /* ---------- новый интерфейс: нижние вкладки и экраны ---------- */
+  #nav{position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:520px;
+    display:flex; background:#141f2a; border-top:1px solid var(--line); z-index:40;
+    padding-bottom:env(safe-area-inset-bottom);}
+  #nav.hide{display:none;}
+  #onb{position:fixed; inset:0; background:rgba(0,0,0,.62); display:none; align-items:center;
+    justify-content:center; padding:20px; z-index:70;}
+  #onb.on{display:flex;}
+  .onb-card{background:var(--card); border-radius:18px; padding:22px 20px; max-width:380px;
+    width:100%; text-align:center;}
+  .onb-ic{font-size:46px; line-height:1; margin-bottom:8px;}
+  .onb-card h2{margin:0 0 12px; font-size:20px;}
+  .onb-list{text-align:left; margin:0 0 18px; padding-left:20px; color:var(--muted); line-height:1.65;}
+  #nav button{flex:1; border:0; background:transparent; color:var(--muted); padding:9px 0 11px;
+    font-size:11px; font-weight:600; font-family:inherit; cursor:pointer; display:flex;
+    flex-direction:column; align-items:center; gap:3px;}
+  #nav button .i{font-size:20px; line-height:1;}
+  #nav button.active{color:var(--accent);}
+  body.withnav #app{padding-bottom:calc(88px + env(safe-area-inset-bottom));}
+
+  .hero{background:linear-gradient(160deg,#26405c,#1c2b3b); border:1px solid var(--line);
+    border-radius:16px; padding:14px; margin:10px 0 4px;}
+  .hero-lbl{font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+    margin:0 0 10px;}
+  .hero-row{display:flex; gap:12px; align-items:center;}
+  .hero-thumb{width:76px; height:76px; border-radius:12px; flex:none; overflow:hidden;
+    background:var(--card); display:flex; align-items:center; justify-content:center;
+    font-size:26px;}
+  .hero-thumb img{width:100%; height:100%; object-fit:cover; display:none;}
+  .hero-thumb.has img{display:block;}
+  .hero-thumb.has span{display:none;}
+  .hero-meta{flex:1; min-width:0;}
+  .hero-t{font-weight:700; font-size:16px; margin-bottom:4px;}
+  .hero-s{color:var(--muted); font-size:13px; line-height:1.4;}
+
+  .sec{color:var(--muted); font-size:13px; letter-spacing:.08em; text-transform:uppercase;
+    font-weight:700; margin:22px 0 10px;}
+  .hint{color:var(--muted); font-size:12.5px; line-height:1.5; margin:10px 0 0;}
+  .sticky{margin-top:18px;}
+
+  .tabs{background:transparent; padding:0; gap:8px; display:flex; margin-bottom:14px;}
+  .tab{flex:0 0 auto; border:1px solid var(--line); background:var(--card); color:var(--muted);
+    padding:9px 13px; border-radius:999px; font-size:13.5px; font-weight:600;}
+  .tab.active{border-color:var(--accent); color:var(--text); background:var(--card2);}
+  /* ---------- рейтинг ---------- */
+  .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:14px 0;}
+  .row > span{color:var(--muted); font-size:14px;}
+  .segs{display:flex; gap:8px;}
+  .seg{border:1px solid var(--line); background:var(--card); color:var(--muted);
+    padding:9px 14px; border-radius:10px; font-size:14px; font-weight:600;
+    cursor:pointer; font-family:inherit;}
+  .seg.active{border-color:var(--accent); color:var(--text); background:var(--card2);}
+  .list{background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .item{display:flex; align-items:center; gap:11px; padding:11px 13px;
+    border-bottom:1px solid var(--line);}
+  .item:last-child{border-bottom:0;}
+  .item .pos{width:24px; text-align:center; font-weight:700; color:var(--muted);
+    font-variant-numeric:tabular-nums;}
+  .item .pos.top1{color:#ffcc4a;} .item .pos.top2{color:#c9d3dd;} .item .pos.top3{color:#e0915a;}
+  .item .av{width:34px; height:34px; border-radius:50%; flex:none; display:flex;
+    align-items:center; justify-content:center; font-weight:700; font-size:14px;
+    color:#0e1620; background:var(--accent);}
+  .item .nm{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-size:15px;}
+  .item .tm{font-variant-numeric:tabular-nums; font-weight:700; font-size:15px;}
+  .item.me{background:var(--card2);}
+  .item.me .tm{color:var(--ok);}
+  .list .hint{margin:0; padding:14px;}
+
+  /* ---------- галерея «Мои пазлы» ---------- */
+  .mygrid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:12px;}
+  .mycard{position:relative; border:1px solid var(--line); border-radius:14px; overflow:hidden;
+    background:var(--card); cursor:pointer; text-align:left; padding:0; color:var(--text);
+    font-family:inherit; display:flex; flex-direction:column;}
+  .mycard .thumb{position:relative; aspect-ratio:1 / 1; background:var(--card2); overflow:hidden;
+    display:flex; align-items:center; justify-content:center; font-size:30px; color:var(--muted);}
+  .mycard .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .mycard .thumb img.gray{filter:grayscale(1) brightness(.72); opacity:.8;}
+  .mycard .ttl{font-weight:700; font-size:14px; padding:9px 11px 2px;}
+  .mycard .ds{font-size:12px; color:var(--muted); padding:0 11px 11px;}
+  .badge{position:absolute; top:8px; font-size:12px; font-weight:700; padding:3px 8px;
+    border-radius:999px; line-height:1.3;}
+  .badge.pct{right:8px; background:rgba(0,0,0,.62); color:#fff;}
+  .badge.new{left:8px; background:#f0883e; color:#241304;}
+  .badge.done{right:8px; background:#3ddc97; color:#062a1a;}
+  .myempty{padding:26px 12px; text-align:center; color:var(--muted); font-size:13.5px;
+    line-height:1.5;}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ЭКРАН: Игра -->
+  <section id="setup" class="screen active">
+    <h1>🧩 Пазл</h1>
+    <p class="sub">Собирай картинки из готовых или из своего фото</p>
+
+    <p class="sec">Режим</p>
+    <div class="modes">
+      <button class="mode-card active" data-mode="puzzle">
+        <span class="ic">🧩</span>
+        <span class="tt">Собери картинку</span>
+        <span class="ds">Перетаскивай кусочки на поле — каждый встаёт на своё место</span>
+      </button>
+      <button class="mode-card" data-mode="shuffle">
+        <span class="ic">🔢</span>
+        <span class="tt">Пятнашки</span>
+        <span class="ds">Нажимай на две клетки — меняй их местами и собери по порядку</span>
+      </button>
+    </div>
+
+    <div id="diffShuffle" style="display:none">
+      <p class="sec">Размер поля</p>
+      <div class="pieces">
+        <button class="diff-btn active" data-n="3">
+          <span class="pgrid" style="--c:3; --r:3"></span>
+          <span class="p-name">Лёгкий</span>
+          <span class="p-num">3 × 3</span>
+        </button>
+        <button class="diff-btn" data-n="4">
+          <span class="pgrid" style="--c:4; --r:4"></span>
+          <span class="p-name">Средний</span>
+          <span class="p-num">4 × 4</span>
+        </button>
+        <button class="diff-btn" data-n="5">
+          <span class="pgrid" style="--c:5; --r:5"></span>
+          <span class="p-name">Сложный</span>
+          <span class="p-num">5 × 5</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="diffPuzzle">
+      <p class="sec">Сколько кусочков</p>
+      <div class="pieces">
+        <button class="diff-btn active" data-p="12">
+          <span class="pgrid" style="--c:4; --r:3"></span>
+          <span class="p-name">Лёгкий</span>
+          <span class="p-num">12 кусочков</span>
+        </button>
+        <button class="diff-btn" data-p="24">
+          <span class="pgrid" style="--c:6; --r:4"></span>
+          <span class="p-name">Средний</span>
+          <span class="p-num">24 кусочка</span>
+        </button>
+        <button class="diff-btn" data-p="48">
+          <span class="pgrid" style="--c:8; --r:6"></span>
+          <span class="p-name">Сложный</span>
+          <span class="p-num">48 кусочков</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="hero">
+      <p class="hero-lbl">Картинка</p>
+      <div class="hero-row">
+        <div class="hero-thumb" id="chosenWrap"><span>🖼</span><img id="chosenThumb" alt=""></div>
+        <div class="hero-meta">
+          <div class="hero-t" id="chosenText">Картинка не выбрана</div>
+          <div class="hero-s" id="chosenSub">Выбери готовую, загрузи своё фото или нарисуй по описанию</div>
+        </div>
+      </div>
+      <button class="primary" id="pickBtn">Выбрать картинку</button>
+    </div>
+
+    <button id="startBtn" class="primary big" disabled>Сначала выбери картинку</button>
+    <button id="duetBtn" class="primary big" style="display:none">👥 Играть вдвоём</button>
+  </section>
+
+  <!-- ЭКРАН: Картинки -->
+  <section id="pics" class="screen">
+    <h1>🖼 Картинки</h1>
+    <p class="sub">Что будем собирать</p>
+
+    <div class="tabs">
+      <button class="tab active" data-src="ready">Готовые</button>
+      <button class="tab" data-src="photo">Своё фото</button>
+      <button class="tab" data-src="gen">По описанию</button>
+    </div>
+
+    <div id="paneReady" class="pane active">
+      <p class="hint" id="readyHint">Выбери картинку в один тап — без загрузки фото.</p>
+      <div class="picgrid" id="readyGrid"></div>
+    </div>
+
+    <div id="panePhoto" class="pane">
+      <label class="drop" id="drop" for="fileInput">
+        <span id="dropText">📷 Нажми, чтобы выбрать фото</span>
+        <input id="fileInput" type="file" accept="image/*" hidden>
+      </label>
+    </div>
+
+    <div id="paneGen" class="pane">
+      <input id="prompt" type="text" placeholder="напр.: кот в космосе, аниме" maxlength="300"
+             autocomplete="off" autocapitalize="sentences">
+      <button id="genBtn" class="primary">Сгенерировать картинку</button>
+      <div id="genStatus" class="status"></div>
+    </div>
+
+    <div id="previewWrap">
+      <img id="preview" alt="выбранная картинка">
+      <button id="clearBtn" class="ghost">✕ Убрать картинку</button>
+    </div>
+
+    <div class="sticky">
+      <p class="status" id="picsWhy" style="text-align:center; margin:0 0 8px"></p>
+      <button id="picsStart" class="primary big" disabled>Играть с этой картинкой</button>
+    </div>
+  </section>
+
+  <section id="duet" class="screen">
+    <h1>👥 Игра вдвоём</h1>
+    <p class="sub">Вы с другом собираете одну картинку вместе — ход одного сразу видит другой</p>
+
+    <div id="duetStart">
+      <div class="duet-pic" id="duetPicRow" style="display:none">
+        <img id="duetThumb" alt="">
+        <span>Картинка выбрана — можно создавать игру</span>
+      </div>
+
+      <div class="how" id="duetHow">
+        <p><b>1.</b> Выбери картинку — кнопка ниже</p>
+        <p><b>2.</b> Нажми «Создать игру» — получишь ссылку с кодом</p>
+        <p><b>3.</b> Отправь ссылку другу — он откроет и подключится сам</p>
+      </div>
+
+      <p class="status" id="needPic" style="display:none">Сначала выбери картинку — без неё игру не создать.</p>
+      <button id="pickPicBtn" class="ghost" style="display:none">🖼 Выбрать картинку</button>
+
+      <button id="createRoomBtn" class="primary big">Создать игру</button>
+      <p class="status" id="createStatus"></p>
+
+      <p class="modes-title">Уже есть код от друга?</p>
+      <input id="codeInput" type="text" inputmode="numeric" maxlength="4" placeholder="4 цифры"
+             autocomplete="off">
+      <button id="joinRoomBtn" class="primary">Войти по коду</button>
+      <p class="status" id="joinStatus"></p>
+    </div>
+
+    <div id="duetWait" style="display:none">
+      <p class="modes-title">Ссылка для друга</p>
+      <div class="code-show" id="codeShow">----</div>
+      <button id="inviteBtn" class="primary">📨 Отправить другу ссылку</button>
+      <button id="copyCodeBtn" class="ghost">Скопировать код</button>
+      <p class="status" id="waitStatus">Ждём друга — как только он откроет ссылку, игра начнётся сама</p>
+    </div>
+
+    <button class="ghost" id="duetBackBtn">← Назад</button>
+  </section>
+
+  <!-- Экран игры -->
+
+  <section id="game" class="screen">
+    <div class="hud">
+      <span class="chip" id="timer">0:00</span>
+      <span class="chip" id="moves">0 ходов</span>
+      <span class="chip" id="playersChip" style="display:none"></span>
+      <span class="spacer"></span>
+      <button id="peekBtn" title="Показать картинку">👁</button>
+      <button id="soundBtn" title="Звук вкл/выкл">🔊</button>
+      <button id="resetBtn" title="Перемешать заново">↺</button>
+    </div>
+    <div class="board-wrap">
+      <img id="peekImg" alt="">
+      <div id="board"></div>
+      <div id="puzzleBoard"></div>
+    </div>
+    <div id="tray" class="tray"></div>
+    <button id="backBtn" class="ghost">← Другая картинка</button>
+  </section>
+
+  <!-- ЭКРАН: Картинка дня -->
+  <section id="day" class="screen">
+    <h1>📅 Картинка дня</h1>
+    <p class="sub">Одна картинка для всех. Собери и попади в список.</p>
+
+    <div class="hero">
+      <p class="hero-lbl">Сегодняшняя картинка</p>
+      <div class="hero-row">
+        <div class="hero-thumb" id="dayWrap"><span>🖼</span><img id="dayThumb" alt=""></div>
+        <div class="hero-meta">
+          <div class="hero-t">Картинка дня появится здесь</div>
+          <div class="hero-s">Включим вместе с рейтингом — тогда у всех будет одна картинка</div>
+        </div>
+      </div>
+    </div>
+    <button id="dayPlayBtn" class="primary big" disabled>Собрать картинку дня</button>
+
+    <div class="row">
+      <span>Период</span>
+      <div class="segs">
+        <button class="seg active" data-period="today">Сегодня</button>
+        <button class="seg" data-period="all">За всё время</button>
+      </div>
+    </div>
+
+    <div class="list" id="rateList">
+      <p class="hint">Рейтинг включим совсем скоро: сервер уже засекает время, а список мест
+        появится, когда подключим хранилище. Собирай — результат не потеряется.</p>
+    </div>
+
+    <p class="hint">Время считает сервер, зачётная попытка одна в день. Результаты быстрее
+      3 секунд в рейтинг не попадают — такие обычно дают скрипты.</p>
+  </section>
+
+  <!-- ЭКРАН: Мои пазлы -->
+  <section id="my" class="screen">
+    <h1>🧩 Мои пазлы</h1>
+    <p class="sub">Всё, что ты начал и собрал</p>
+
+    <div class="tabs">
+      <button class="tab active" data-mytab="progress">В процессе (<span id="myCntP">0</span>)</button>
+      <button class="tab" data-mytab="done">Собрано (<span id="myCntD">0</span>)</button>
+    </div>
+
+    <div class="mygrid" id="myGrid"><p class="myempty">Загружаю…</p></div>
+  </section>
+
+  <!-- подсказка при первом запуске -->
+  <div id="onb">
+    <div class="onb-card">
+      <div class="onb-ic">🧩</div>
+      <h2>Как играть</h2>
+      <ol class="onb-list">
+        <li>Выбери режим и сложность</li>
+        <li>Возьми картинку — готовую, своё фото или по описанию</li>
+        <li>Собери её — и увидишь свой результат</li>
+      </ol>
+      <button id="onbBtn" class="primary big">Понятно</button>
+    </div>
+  </div>
+
+  <!-- нижняя навигация -->
+  <nav id="nav">
+    <button class="active" data-go="setup"><span class="i">🧩</span>Игра</button>
+    <button data-go="day"><span class="i">📅</span>День</button>
+    <button data-go="pics"><span class="i">🖼</span>Картинки</button>
+    <button data-go="my"><span class="i">🧩</span>Мои</button>
+  </nav>
+</div>
+
+<!-- Победа -->
+<div id="win" class="overlay">
+  <div class="win-card">
+    <div class="win-emoji">🎉</div>
+    <h2>Собрано!</h2>
+    <p id="winStats"></p>
+    <button id="shareBtn" class="primary big">📨 Поделиться результатом</button>
+    <button id="againBtn" class="primary big">Ещё раз</button>
+    <button id="otherBtn" class="ghost">Другая картинка</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
+
+  // код из ссылки-приглашения: ?room=1234 (наша кнопка в боте) или startapp=1234
+  function readStartParam(){
+    var sp = '';
+    try {
+      var m0 = (location.search + '&' + location.hash).match(/[?&#]room=([0-9]{4})/);
+      if (m0) sp = m0[1];
+    } catch(e){}
+    if (!/^\d{4}$/.test(sp)){
+      try {
+        if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param)
+          sp = String(tg.initDataUnsafe.start_param);
+      } catch(e){}
+    }
+    if (!/^\d{4}$/.test(sp)){
+      try {
+        var m = (location.search + '&' + location.hash).match(/tgWebAppStartParam=([^&?#]+)/);
+        if (m) sp = decodeURIComponent(m[1]);
+      } catch(e){}
+    }
+    return /^\d{4}$/.test(sp) ? sp : '';
+  }
+  var INVITE = readStartParam();
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  // ---------- звук и вибрация ----------
+  var soundOn = true;
+  try { soundOn = localStorage.getItem('puzzleSound') !== '0'; } catch(e){}
+  var actx = null;
+
+  // браузер включает звук только после первого касания — ждём его
+  function audioUnlock(){
+    if (!actx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) { try { actx = new AC(); } catch(e){ actx = null; } }
+    }
+    if (actx && actx.state === 'suspended') { try { actx.resume(); } catch(e){} }
+  }
+  ['pointerdown','touchstart','click'].forEach(function(ev){
+    document.addEventListener(ev, audioUnlock, {passive:true});
+  });
+
+  // пока тащим кусочек — гасим любые движения страницы
+  function lockScroll(on){
+    try {
+      document.documentElement.style.overflow = on ? 'hidden' : '';
+      document.body.style.overflow = on ? 'hidden' : '';
+    } catch(e){}
+  }
+  document.addEventListener('touchmove', function(e){
+    if (dragEl) e.preventDefault();
+  }, {passive:false});
+
+  // короткий тон с плавным затуханием — файлы не нужны
+  function tone(freq, start, dur, vol, type){
+    if (!soundOn || !actx) return;
+    try {
+      var t0 = actx.currentTime + (start || 0);
+      var osc = actx.createOscillator();
+      var gain = actx.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(vol || 0.14, t0 + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + (dur || 0.12));
+      osc.connect(gain);
+      gain.connect(actx.destination);
+      osc.start(t0);
+      osc.stop(t0 + (dur || 0.12) + 0.03);
+    } catch(e){}
+  }
+
+  function sfxPick(){ tone(660, 0, 0.07, 0.09, 'triangle'); }
+  function sfxSwap(){ tone(420, 0, 0.09, 0.12, 'square'); tone(560, 0.05, 0.09, 0.09, 'triangle'); }
+  function sfxSnap(){ tone(880, 0, 0.13, 0.13, 'sine'); tone(1320, 0.06, 0.16, 0.08, 'sine'); }
+  function sfxShuffle(){ tone(320, 0, 0.09, 0.09, 'triangle'); tone(250, 0.07, 0.10, 0.07, 'triangle'); }
+  function sfxWin(){
+    var notes = [523, 659, 784, 1047];
+    for (var i = 0; i < notes.length; i++) tone(notes[i], i * 0.13, 0.3, 0.15, 'sine');
+    tone(1568, 0.55, 0.5, 0.09, 'sine');
+  }
+
+  function buzz(kind){
+    if (!tg || !tg.HapticFeedback) return;
+    try {
+      if (kind === 'pick') tg.HapticFeedback.selectionChanged();
+      else if (kind === 'swap') tg.HapticFeedback.impactOccurred('light');
+      else if (kind === 'snap') tg.HapticFeedback.impactOccurred('medium');
+      else tg.HapticFeedback.notificationOccurred('success');
+    } catch(e){}
+  }
+
+  // ---------- состояние ----------
+  var n = 3;                 // размер сетки
+  var sourceURL = null;      // квадратная картинка (dataURL или blob)
+  var pictureName = '';      // имя картинки для галереи (пусто у фото и сгенерированных)
+  var pictureKind = '';      // откуда картинка: photo, prompt или ready
+  var dailyMode = false;     // играем картинку дня — за неё отдельный зачёт
+  var tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
+  var tgId = (tgUser && tgUser.id) ? tgUser.id : 0;
+  var tgName = tgUser ? (tgUser.first_name || tgUser.username || '') : '';
+  // готовые картинки: имена файлов на сервере
+  var READY = ['pazl-01-zakat.png','pazl-02-gory.png','pazl-03-shary.png','pazl-04-cvety.png',
+               'pazl-05-more.png','pazl-06-gorod.png','pazl-07-raduga.png','pazl-08-kosmos.png'];
+  var pickFor = 'solo';      // откуда пришли выбирать картинку: 'solo' или 'duet'
+  var tiles = [];            // tiles[позиция] = индекс фрагмента
+  var sel = -1;              // выбранная клетка
+  var moves = 0;
+  var elapsed = 0, timerId = null, finished = false;
+
+  // ---------- режим и сложность ----------
+  var mode = 'puzzle';       // 'puzzle' — сборка кусочков, 'shuffle' — пятнашки
+  var psize = 12;            // сколько кусочков выбрано
+  var prows = 3, pcols = 4;  // раскладка поля пазла
+  var ptotal = 12;           // кусочков на поле
+  var slotEls = [];
+  var dragEl = null, dragHome = null, hotSlot = null;
+  var dragX0 = 0, dragY0 = 0, dragL = 0, dragT = 0;
+  var PADR = 0.20;               // насколько выступ кусочка выходит за клетку
+  var edgesV = [], edgesH = [];  // знаки замков на рёбрах поля
+  var pieceURLs = [];            // готовые картинки кусочков
+  var srcImg = null;             // картинка, из которой режем
+
+  // ---------- выбор источника ----------
+  document.querySelectorAll('.tab').forEach(function(t){
+    t.addEventListener('click', function(){
+      document.querySelectorAll('.tab').forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      var src = t.dataset.src;
+      $('panePhoto').classList.toggle('active', src === 'photo');
+      $('paneGen').classList.toggle('active', src === 'gen');
+      $('paneReady').classList.toggle('active', src === 'ready');
+      setStatus('');
+    });
+  });
+
+  document.querySelectorAll('.diff-btn').forEach(function(b){
+    b.addEventListener('click', function(){
+      b.parentNode.querySelectorAll('.diff-btn').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      if (b.dataset.p) psize = parseInt(b.dataset.p, 10);
+      else n = parseInt(b.dataset.n, 10);
+    });
+  });
+
+  // выбор игры: пятнашки или пазл
+  document.querySelectorAll('.mode-card').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('.mode-card').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      mode = b.dataset.mode;
+      $('diffShuffle').style.display = (mode === 'shuffle') ? 'block' : 'none';
+      $('diffPuzzle').style.display = (mode === 'puzzle') ? 'block' : 'none';
+      setDuetVisible();
+      sfxPick();
+    });
+  });
+
+  setDuetVisible();
+
+  function setStatus(text, err){
+    var st = $('genStatus');
+    st.textContent = text || '';
+    st.className = 'status' + (err ? ' err' : '');
+  }
+
+  // ---------- загрузка своего фото ----------
+  $('fileInput').addEventListener('change', function(e){
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){ acceptImage(reader.result, 'Фото выбрано', '', 'photo'); };
+    reader.readAsDataURL(f);
+  });
+
+  // ---------- генерация по тексту ----------
+  $('genBtn').addEventListener('click', function(){
+    var prompt = $('prompt').value.trim();
+    if (!prompt){ setStatus('Напиши, что нарисовать', true); return; }
+    $('genBtn').disabled = true;
+    setStatus('Рисую… бесплатный генератор отвечает примерно раз в 15 секунд');
+    fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({prompt: prompt})
+    }).then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.blob();
+    }).then(function(blob){
+      acceptImage(URL.createObjectURL(blob), 'Картинка готова', '', 'prompt');
+    }).catch(function(){
+      setStatus('Не получилось сгенерировать. Попробуй ещё раз или загрузи фото.', true);
+    }).then(function(){
+      $('genBtn').disabled = false;
+    });
+  });
+
+  // ---------- приём картинки от любого источника ----------
+  function acceptImage(url, note, name, kind){
+    pictureName = name || '';
+    pictureKind = name ? 'ready' : (kind || 'photo');
+    dailyMode = false;
+    var img = new Image();
+    img.onload = function(){
+      try {
+        sourceURL = squareDataURL(img, 900);
+      } catch(e){
+        sourceURL = url; // на всякий случай: без обрезки
+      }
+      $('preview').src = sourceURL;
+      $('previewWrap').style.display = 'block';
+      $('drop').classList.add('has');
+      $('dropText').textContent = '📷 Другое фото';
+      $('startBtn').disabled = false;
+      $('startBtn').textContent = 'Начать';
+      $('picsStart').disabled = false;
+      $('chosenThumb').src = sourceURL;
+      $('chosenWrap').classList.add('has');
+      $('chosenText').textContent = 'Картинка выбрана';
+      $('chosenSub').textContent = 'Нажми «Начать» — и собирай';
+      setStatus(note || 'Готово');
+    };
+    img.onerror = function(){ setStatus('Картинку не удалось прочитать', true); };
+    img.src = url;
+  }
+
+  // ---------- готовые картинки: выбираются в один тап ----------
+  (function buildReady(){
+    var grid = $('readyGrid');
+    if (!grid) return;
+    READY.forEach(function(name, i){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.name = name;
+      var im = document.createElement('img');
+      im.loading = 'lazy';
+      im.alt = 'готовая картинка';
+      im.src = '/' + name;
+      im.onerror = function(){ b.style.display = 'none'; };   // картинки ещё не залиты
+      b.appendChild(im);
+      b.addEventListener('click', function(){
+        grid.querySelectorAll('button').forEach(function(x){ x.classList.remove('sel'); });
+        b.classList.add('sel');
+        acceptImage('/' + name, 'Готовая картинка выбрана', name);
+        sfxPick();
+      });
+      grid.appendChild(b);
+    });
+  })();
+
+  // ---------- убрать выбранную картинку и вернуться к выбору ----------
+  $('clearBtn').addEventListener('click', function(){
+    sourceURL = null;
+    $('preview').removeAttribute('src');
+    $('previewWrap').style.display = 'none';
+    $('drop').classList.remove('has');
+    $('dropText').textContent = '📷 Нажми, чтобы выбрать фото';
+    $('fileInput').value = '';
+    $('startBtn').disabled = true;
+    $('startBtn').textContent = 'Сначала выбери картинку';
+    $('picsStart').disabled = true;
+    $('chosenThumb').removeAttribute('src');
+    $('chosenWrap').classList.remove('has');
+    $('chosenText').textContent = 'Картинка не выбрана';
+    $('chosenSub').textContent = 'Выбери готовую, загрузи своё фото или нарисуй по описанию';
+    setStatus('');
+    try { sfxPick(); } catch(e){}
+    if (tg && tg.HapticFeedback) { try { tg.HapticFeedback.selectionChanged(); } catch(e){} }
+  });
+
+  // приводим картинку к квадрату, но НЕ обрезаем: фото вписываем целиком,
+  // а поля по бокам заливаем его же размытой копией
+  function squareDataURL(img, size){
+    var c = document.createElement('canvas');
+    c.width = c.height = size;
+    var ctx = c.getContext('2d');
+    var iw = img.naturalWidth || size;
+    var ih = img.naturalHeight || size;
+
+    // фон: сильно уменьшенная копия, растянутая обратно — получается мягкое размытие
+    var mini = document.createElement('canvas');
+    mini.width = mini.height = 40;
+    var mctx = mini.getContext('2d');
+    var k = Math.max(40 / iw, 40 / ih);
+    mctx.drawImage(img, (40 - iw * k) / 2, (40 - ih * k) / 2, iw * k, ih * k);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(mini, 0, 0, 40, 40, 0, 0, size, size);
+
+    // сама картинка — целиком, по центру
+    var fit = Math.min(size / iw, size / ih);
+    var w = iw * fit, h = ih * fit;
+    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+    return c.toDataURL('image/jpeg', 0.92);
+  }
+  // ---------- запуск игры ----------
+  $('startBtn').addEventListener('click', function(){
+    if (!sourceURL) return;
+    net.on = false;
+    $('peekImg').src = sourceURL;
+    show('game');
+    resetGame();
+  });
+
+  // ---------- игра вдвоём: комнаты ----------
+  var net = { on: false, host: false, code: null, ws: null, sid: null,
+              count: 1, playing: false, lastState: null, applying: false,
+              edgesV: [], edgesH: [], order: [], placed: {} };
+
+  function setDuetVisible(){
+    $('duetBtn').style.display = (mode === 'puzzle') ? 'block' : 'none';
+  }
+
+  function paintPlayers(){
+    var el = $('playersChip');
+    if (!el) return;
+    el.textContent = net.on ? ('👥 ' + net.count) : '';
+    el.style.display = net.on ? 'inline-block' : 'none';
+  }
+
+  function randomEdges(rows, cols){
+    var ev = [], eh = [], r, c;
+    for (r = 0; r < rows; r++){
+      ev[r] = []; eh[r] = [];
+      for (c = 0; c < cols; c++){ ev[r][c] = 0; eh[r][c] = 0; }
+    }
+    for (r = 0; r < rows; r++)
+      for (c = 0; c < cols - 1; c++) ev[r][c] = (Math.random() < 0.5) ? 1 : -1;
+    for (r = 0; r < rows - 1; r++)
+      for (c = 0; c < cols; c++) eh[r][c] = (Math.random() < 0.5) ? 1 : -1;
+    return {ev: ev, eh: eh};
+  }
+
+  function shuffledOrder(n){
+    var a = [], i, j, t;
+    for (i = 0; i < n; i++) a.push(i);
+    for (i = a.length - 1; i > 0; i--){
+      j = Math.floor(Math.random() * (i + 1));
+      t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function openDuet(){
+    $('duetStart').style.display = 'block';
+    $('duetWait').style.display = 'none';
+    var has = !!sourceURL;
+    $('createRoomBtn').disabled = !has;
+    $('needPic').style.display = has ? 'none' : 'block';
+    $('duetHow').style.display = has ? 'none' : 'block';
+    $('duetPicRow').style.display = has ? 'flex' : 'none';
+    if (has) $('duetThumb').src = sourceURL;
+    $('pickPicBtn').style.display = 'block';
+    $('pickPicBtn').textContent = has ? '🖼 Другая картинка' : '🖼 Выбрать картинку';
+    $('createStatus').textContent = '';
+    $('joinStatus').textContent = '';
+    $('codeInput').value = '';
+    show('duet');
+  }
+
+  $('duetBtn').addEventListener('click', openDuet);
+
+  $('pickPicBtn').addEventListener('click', function(){ showPics('duet'); });
+
+  $('duetBackBtn').addEventListener('click', function(){
+    leaveRoom();
+    show('setup');
+  });
+
+  $('createRoomBtn').addEventListener('click', function(){
+    if (!sourceURL) return;
+    var lay = layoutFor(psize);
+    var rows = lay.rows, cols = lay.cols;
+    var e = randomEdges(rows, cols);
+    $('createRoomBtn').disabled = true;
+    $('createStatus').textContent = 'Создаю игру…';
+    fetch('/api/room/create', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image: sourceURL, psize: psize, pcols: cols, prows: rows,
+                            edges_v: e.ev, edges_h: e.eh, order: shuffledOrder(rows * cols)})
+    }).then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(data){
+      $('createRoomBtn').disabled = false;
+      $('createStatus').textContent = '';
+      $('duetStart').style.display = 'none';
+      $('duetWait').style.display = 'block';
+      $('codeShow').textContent = data.code;
+      openRoom(data.code, true);
+    }).catch(function(){
+      $('createRoomBtn').disabled = false;
+      $('createStatus').textContent = 'Не получилось создать комнату. Попробуй ещё раз.';
+    });
+  });
+
+  function joinRoom(code){
+    $('joinStatus').textContent = 'Ищу комнату…';
+    fetch('/api/room/join', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code: code})
+    }).then(function(r){
+      if (r.status === 404) throw new Error('notfound');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(data){
+      $('joinStatus').textContent = '';
+      sourceURL = data.image;
+      $('duetStart').style.display = 'none';
+      $('duetWait').style.display = 'block';
+      $('codeShow').textContent = code;
+      $('waitStatus').textContent = 'Вхожу в игру…';
+      openRoom(code, false, data.state);
+    }).catch(function(err){
+      var msg = (err.message === 'notfound')
+        ? 'Такой комнаты нет — проверь код или попроси новую ссылку'
+        : 'Не получилось войти. Попробуй ещё раз.';
+      $('joinStatus').textContent = msg;
+      $('waitStatus').textContent = msg;
+      $('duetStart').style.display = 'block';
+      $('duetWait').style.display = 'none';
+    });
+  }
+
+  $('joinRoomBtn').addEventListener('click', function(){
+    var code = ($('codeInput').value || '').replace(/\D/g, '').slice(0, 4);
+    if (code.length !== 4){ $('joinStatus').textContent = 'Введи 4 цифры кода'; return; }
+    joinRoom(code);
+  });
+
+  function openRoom(code, host, state){
+    leaveRoom();
+    net.on = true; net.host = !!host; net.code = code;
+    net.count = 1; net.playing = false; net.lastState = state || null;
+    $('waitStatus').textContent = host ? 'Ждём друга — как только он откроет ссылку, игра начнётся сама' : 'Вхожу…';
+    var proto = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+    try {
+      net.ws = new WebSocket(proto + location.host + '/ws/room/' + code);
+    } catch (e){ net.ws = null; }
+    if (!net.ws){
+      $('waitStatus').textContent = 'Не удалось подключиться. Обнови страницу.';
+      return;
+    }
+    net.ws.onmessage = function(ev){
+      var m;
+      try { m = JSON.parse(ev.data); } catch (e){ return; }
+      if (m.type === 'hello'){
+        net.sid = m.sid; net.count = m.count; net.lastState = m.state;
+        paintPlayers(); maybeStart(null);
+      } else if (m.type === 'count'){
+        net.count = m.count; paintPlayers(); maybeStart(null);
+      } else if (m.type === 'move'){
+        if (m.sid !== net.sid) applyRemote(m.idx, m.slot);
+      } else if (m.type === 'reset'){
+        if (m.sid !== net.sid){
+          $('win').classList.remove('show');
+          net.placed = {};
+          buildNetPuzzle();
+        }
+      } else if (m.type === 'full'){
+        $('waitStatus').textContent = 'В комнате уже максимум игроков';
+        leaveRoom();
+      }
+    };
+    net.ws.onclose = function(){
+      if (!net.on || net.playing) return;
+      $('waitStatus').textContent = 'Связь с игрой прервалась. Создай игру заново или попроси новую ссылку.';
+    };
+  }
+
+  function maybeStart(state){
+    if (!net.on || net.playing) return;
+    if (net.count < 2) return;
+    var st = state || net.lastState;
+    if (!st) return;
+    net.playing = true;
+    enterNetGame(st);
+  }
+
+  function enterNetGame(state){
+    psize = state.psize;
+    prows = state.prows; pcols = state.pcols;
+    net.edgesV = state.edges_v; net.edgesH = state.edges_h;
+    net.order = state.order; net.placed = state.placed || {};
+    $('peekImg').src = sourceURL;
+    show('game');
+    buildNetPuzzle();
+  }
+
+  function buildNetPuzzle(){
+    moves = 0; sel = -1; elapsed = 0; finished = false;
+    $('win').classList.remove('show');
+    ptotal = psize;
+    edgesV = net.edgesV; edgesH = net.edgesH;
+    $('board').style.display = 'none';
+    $('puzzleBoard').classList.add('on');
+    $('tray').classList.add('on');
+    $('peekImg').style.opacity = '0';
+    buildSlots();
+    updateHud();
+    paintPlayers();
+    audioUnlock();
+    pieceURLs = [];
+    $('tray').innerHTML = '';
+    var im = new Image();
+    im.onload = function(){
+      srcImg = im;
+      pieceURLs = [];
+      for (var i = 0; i < ptotal; i++){
+        pieceURLs.push(pieceImage(Math.floor(i / pcols), i % pcols));
+      }
+      var size = trayPieceSize(ptotal), k, idx;
+      for (k in net.placed){
+        idx = parseInt(k, 10);
+        putInSlot(makePiece(idx, size), slotEls[net.placed[k]]);
+      }
+      for (var j = 0; j < net.order.length; j++){
+        idx = net.order[j];
+        if (String(idx) in net.placed) continue;
+        $('tray').appendChild(makePiece(idx, size));
+      }
+      startTimer();
+    };
+    im.onerror = function(){ startTimer(); };
+    im.src = sourceURL;
+  }
+
+  function putInSlot(el, slot){
+    if (!el || !slot) return;
+    el.classList.remove('drag');
+    el.style.left = ''; el.style.top = '';
+    el.style.width = ''; el.style.height = '';
+    slot.appendChild(el);
+    syncSlots();
+  }
+
+  function netSend(msg){
+    if (!net.on || !net.ws || net.ws.readyState !== 1) return;
+    try { net.ws.send(JSON.stringify(msg)); } catch (e){}
+  }
+
+  function applyRemote(idx, slot){
+    net.applying = true;
+    var list = document.querySelectorAll('.piece'), el = null, i;
+    for (i = 0; i < list.length; i++){
+      if (String(list[i].dataset.idx) === String(idx)){ el = list[i]; break; }
+    }
+    if (el){
+      if (slot < 0) sendBack(el);
+      else putInSlot(el, slotEls[slot]);
+    }
+    net.applying = false;
+    updateHud();
+    if (correctCount() >= ptotal) win();
+  }
+
+  function leaveRoom(){
+    if (net.ws){ try { net.ws.close(); } catch (e){} }
+    net.on = false; net.ws = null; net.sid = null; net.playing = false;
+    paintPlayers();
+  }
+
+  $('inviteBtn').addEventListener('click', function(){
+    var url = 'https://t.me/tekst_redaktor_bot?start=r' + net.code;
+    var text = 'Собери со мной пазл — открой ссылку, нажми «Войти в игру», и играем вдвоём';
+    if (tg && tg.openTelegramLink){
+      try {
+        tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(url)
+                            + '&text=' + encodeURIComponent(text));
+        return;
+      } catch (e){}
+    }
+    try {
+      navigator.clipboard.writeText(url);
+      $('waitStatus').textContent = 'Ссылка скопирована — отправь её другу';
+    } catch (e){}
+  });
+
+  $('copyCodeBtn').addEventListener('click', function(){
+    try {
+      navigator.clipboard.writeText(String(net.code));
+      $('waitStatus').textContent = 'Код скопирован';
+    } catch (e){}
+  });
+
+  // нижние вкладки
+  document.body.classList.add('withnav');
+  $('nav').querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click', function(){
+      if (b.dataset.go === 'pics') showPics('solo');
+      else show(b.dataset.go);
+    });
+  });
+  $('pickBtn').addEventListener('click', function(){ showPics('solo'); });
+
+  // экран «Картинки»: помним, зачем пришли — собрать одному или создать игру вдвоём
+  function showPics(forWho){
+    pickFor = (forWho === 'duet') ? 'duet' : 'solo';
+    $('picsStart').textContent = (pickFor === 'duet')
+      ? '👥 Создать игру с этой картинкой'
+      : 'Играть с этой картинкой';
+    $('picsWhy').textContent = (pickFor === 'duet')
+      ? 'Для игры вдвоём: выбери картинку — и сразу создадим игру для тебя и друга'
+      : '';
+    show('pics');
+  }
+
+  // подсказка при первом запуске (по ссылке-приглашению не мешаем — сразу в игру)
+  if (!INVITE){
+    try {
+      if (!localStorage.getItem('puzzle_onb')) $('onb').classList.add('on');
+    } catch (e){ $('onb').classList.add('on'); }
+  }
+  $('onbBtn').addEventListener('click', function(){
+    $('onb').classList.remove('on');
+    try { localStorage.setItem('puzzle_onb', '1'); } catch(e){}
+  });
+
+  // ---------- рейтинг дня ----------
+  var ratePeriod = 'today';
+
+  function rateTime(sec){
+    if (sec === null || sec === undefined) return '—';
+    return Number(sec).toFixed(1) + ' с';
+  }
+
+  function rateRow(place, name, ms, me){
+    var it = document.createElement('div');
+    it.className = 'item' + (me ? ' me' : '');
+    var cls = place === 1 ? ' top1' : (place === 2 ? ' top2' : (place === 3 ? ' top3' : ''));
+    var pos = document.createElement('span');
+    pos.className = 'pos' + cls; pos.textContent = place;
+    var av = document.createElement('span');
+    av.className = 'av'; av.textContent = String(name || '?').trim().charAt(0).toUpperCase();
+    var nm = document.createElement('span');
+    nm.className = 'nm'; nm.textContent = name || 'Игрок';
+    var tm = document.createElement('span');
+    tm.className = 'tm'; tm.textContent = rateTime(ms);
+    it.appendChild(pos); it.appendChild(av); it.appendChild(nm); it.appendChild(tm);
+    return it;
+  }
+
+  var hintNoStore = '<p class="hint">Рейтинг включим совсем скоро: сервер уже засекает ' +
+    'время, а список мест появится, когда подключим хранилище. Собирай — результат ' +
+    'не потеряется.</p>';
+
+  function loadRating(){
+    var box = $('rateList');
+    box.innerHTML = '<p class="hint">Загружаю…</p>';
+    fetch('/api/leaderboard?period=' + ratePeriod + '&tg_id=' + tgId)
+      .then(function(r){ if (!r.ok) throw new Error('нет'); return r.json(); })
+      .then(function(d){
+        var rows = (d && d.items) || [];
+        box.innerHTML = '';
+        if (!rows.length){
+          if (d && d.reason) { box.innerHTML = hintNoStore; return; }
+          box.innerHTML = '<p class="hint">Пока пусто — собери картинку дня первым.</p>';
+          return;
+        }
+        rows.forEach(function(x, i){
+          box.appendChild(rateRow(i + 1, x.name, x.seconds, tgId && x.tg_id === tgId));
+        });
+        if (d.my_place && d.my_place > rows.length){
+          box.appendChild(rateRow(d.my_place, 'Ты', null, true));
+        }
+      })
+      .catch(function(){ box.innerHTML = hintNoStore; });
+  }
+
+  // ---------- картинка дня ----------
+  function loadDaily(){
+    fetch('/api/daily')
+      .then(function(r){ if (!r.ok) throw new Error('нет'); return r.json(); })
+      .then(function(d){
+        if (!d || !d.ok || !d.picture) return;      // базы нет — оставляем заглушку
+        var url = '/' + d.picture;
+        $('dayThumb').src = url;
+        $('dayWrap').classList.add('has');
+        var meta = $('dayWrap').parentNode.querySelector('.hero-meta');
+        if (meta){
+          meta.querySelector('.hero-t').textContent = 'Сегодняшняя картинка — общая для всех';
+          meta.querySelector('.hero-s').textContent = 'Собери её — время попадёт в список дня';
+        }
+        $('dayPlayBtn').disabled = false;
+        $('dayPlayBtn').dataset.name = d.picture;
+        $('dayPlayBtn').dataset.url = url;
+      })
+      .catch(function(){});
+  }
+
+  $('dayPlayBtn').addEventListener('click', function(){
+    var url = this.dataset.url;
+    if (!url) return;
+    var img = new Image();
+    img.onload = function(){
+      try { sourceURL = squareDataURL(img, 900); } catch(e){ sourceURL = url; }
+      pictureName = $('dayPlayBtn').dataset.name || '';
+      dailyMode = true;
+      net.on = false;
+      $('peekImg').src = sourceURL;
+      show('game');
+      resetGame();
+    };
+    img.src = url;
+  });
+
+  document.querySelectorAll('.seg').forEach(function(b){
+    b.addEventListener('click', function(){
+      b.parentNode.querySelectorAll('.seg').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      ratePeriod = b.dataset.period;
+      loadRating();
+    });
+  });
+
+
+  $('picsStart').addEventListener('click', function(){
+    if (!sourceURL) return;
+    if (pickFor === 'duet'){
+      openDuet();
+      $('createRoomBtn').click();
+      return;
+    }
+    net.on = false;
+    $('peekImg').src = sourceURL;
+    show('game');
+    resetGame();
+  });
+
+  // поделиться результатом
+  $('shareBtn').addEventListener('click', function(){
+    var text = 'Я собрал пазл за ' + fmtTime(elapsed) + ' 🧩 Попробуй побить!';
+    var link = 'https://t.me/tekst_redaktor_bot/play';
+    var url = 'https://t.me/share/url?url=' + encodeURIComponent(link) +
+              '&text=' + encodeURIComponent(text);
+    try {
+      if (tg && tg.openTelegramLink) tg.openTelegramLink(url);
+      else window.open(url, '_blank');
+    } catch(e){ try { window.open(url, '_blank'); } catch(e2){} }
+  });
+
+  $('backBtn').addEventListener('click', function(){
+    stopTimer();
+    leaveRoom();
+    showPics('solo');
+  });
+
+  // вход по ссылке-приглашению: ?startapp=1234
+  (function(){
+    try {
+      var sp = INVITE;
+      if (!sp) return;
+      mode = 'puzzle';
+      document.querySelectorAll('.mode-card').forEach(function(x){
+        x.classList.toggle('active', x.dataset.mode === 'puzzle');
+      });
+      $('diffShuffle').style.display = 'none';
+      $('diffPuzzle').style.display = 'block';
+      // показываем экран поиска, чтобы было видно и «ищу», и ошибку
+      $('duetStart').style.display = 'block';
+      $('duetWait').style.display = 'none';
+      $('codeShow').textContent = sp;
+      $('waitStatus').textContent = 'Вхожу в игру…';
+      show('duet');
+      joinRoom(sp);
+    } catch (e){}
+  })();
+
+  var soundBtnEl = $('soundBtn');
+  function paintSound(){ soundBtnEl.textContent = soundOn ? '🔊' : '🔇'; }
+  soundBtnEl.addEventListener('click', function(){
+    soundOn = !soundOn;
+    try { localStorage.setItem('puzzleSound', soundOn ? '1' : '0'); } catch(e){}
+    paintSound();
+    audioUnlock();
+    if (soundOn) sfxPick();
+  });
+  paintSound();
+
+  $('resetBtn').addEventListener('click', function(){
+    if (net.on){ net.placed = {}; netSend({type: 'reset'}); buildNetPuzzle(); }
+    else resetGame();
+  });
+  $('againBtn').addEventListener('click', function(){
+    $('win').classList.remove('show');
+    if (net.on){ net.placed = {}; netSend({type: 'reset'}); buildNetPuzzle(); }
+    else resetGame();
+  });
+  $('otherBtn').addEventListener('click', function(){
+    $('win').classList.remove('show');
+    stopTimer();
+    leaveRoom();
+    showPics('solo');
+  });
+
+  var curScreen = 'setup';
+  function show(name){
+    if (curScreen === 'game' && name !== 'game'){ try { reportProgress(); } catch(e){} }
+    curScreen = name;
+    ['setup', 'pics', 'day', 'game', 'duet', 'my'].forEach(function(k){
+      $(k).classList.toggle('active', k === name);
+    });
+    var withNav = (name === 'setup' || name === 'pics' || name === 'day' || name === 'my');
+    if (name === 'day'){ try { loadDaily(); loadRating(); } catch(e){} }
+    if (name === 'my'){ try { loadMy(); } catch(e){} }
+    $('nav').classList.toggle('hide', !withNav);
+    document.body.classList.toggle('withnav', withNav);
+    $('nav').querySelectorAll('button').forEach(function(b){
+      b.classList.toggle('active', b.dataset.go === name);
+    });
+    // в игре свайп вниз не должен сворачивать приложение
+    if (tg && tg.disableVerticalSwipes && tg.enableVerticalSwipes){
+      try {
+        if (name === 'game') tg.disableVerticalSwipes();
+        else tg.enableVerticalSwipes();
+      } catch(e){}
+    }
+    if (name === 'setup'){
+      lockScroll(false);
+      $('puzzleBoard').classList.remove('on');
+      $('tray').classList.remove('on');
+      $('puzzleBoard').innerHTML = '';
+      $('tray').innerHTML = '';
+      slotEls = [];
+      $('board').style.display = 'grid';
+      $('peekImg').style.opacity = '1';
+    }
+    if (tg && tg.BackButton) {
+      try { name === 'game' ? tg.BackButton.show() : tg.BackButton.hide(); } catch(e){}
+    }
+  }
+  if (tg && tg.BackButton) {
+    tg.BackButton.onClick(function(){ stopTimer(); show('setup'); });
+  }
+
+  function resetGame(){
+    if (mode === 'puzzle'){ resetPuzzle(); return; }
+    moves = 0; sel = -1; elapsed = 0; finished = false;
+    $('win').classList.remove('show');
+    $('board').style.display = 'grid';
+    $('puzzleBoard').classList.remove('on');
+    $('tray').classList.remove('on');
+    tiles = shuffleTiles(n);
+    appearMode = true;
+    audioUnlock();
+    sfxShuffle();
+    render();
+    updateHud();
+    startTimer();
+  }
+
+  function shuffleTiles(nn){
+    var total = nn * nn, arr = [], i;
+    for (i = 0; i < total; i++) arr.push(i);
+    do {
+      for (i = total - 1; i > 0; i--){
+        var j = Math.floor(Math.random() * (i + 1));
+        var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      }
+    } while (isSolved(arr));
+    return arr;
+  }
+
+  function isSolved(arr){
+    for (var i = 0; i < arr.length; i++) if (arr[i] !== i) return false;
+    return true;
+  }
+
+  // ---------- отрисовка ----------
+  function tilePositionStyle(tile){
+    var r = Math.floor(tile / n), c = tile % n;
+    var denom = (n > 1) ? (n - 1) : 1;
+    return (c / denom * 100) + '% ' + (r / denom * 100) + '%';
+  }
+
+  var appearMode = false;  // новая раздача — клетки всплывают
+  var snapPos = -1;        // фрагмент, который только что встал на место
+
+  function render(){
+    var fresh = appearMode, snapAt = snapPos;
+    appearMode = false; snapPos = -1;
+    var board = $('board');
+    board.style.gridTemplateColumns = 'repeat(' + n + ', 1fr)';
+    board.innerHTML = '';
+    for (var pos = 0; pos < tiles.length; pos++){
+      var cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.style.backgroundImage = 'url(' + sourceURL + ')';
+      cell.style.backgroundSize = (n * 100) + '% ' + (n * 100) + '%';
+      cell.style.backgroundPosition = tilePositionStyle(tiles[pos]);
+      if (tiles[pos] === pos) cell.classList.add('done');
+      if (pos === sel) cell.classList.add('sel');
+      if (fresh){
+        cell.classList.add('appear');
+        cell.style.animationDelay = (pos * 18) + 'ms';
+      }
+      if (pos === snapAt) cell.classList.add('snap');
+      cell.dataset.pos = pos;
+      cell.addEventListener('click', onCellClick);
+      board.appendChild(cell);
+    }
+  }
+
+  function onCellClick(){
+    if (finished) return;
+    var pos = parseInt(this.dataset.pos, 10);
+    if (sel === -1){ sel = pos; sfxPick(); buzz('pick'); render(); return; }
+    if (sel === pos){ sel = -1; sfxPick(); buzz('pick'); render(); return; }
+    var a = sel, b = pos;
+    var wasDoneA = (tiles[a] === a), wasDoneB = (tiles[b] === b);
+    var t = tiles[a]; tiles[a] = tiles[b]; tiles[b] = t;
+    sel = -1; moves++;
+    updateHud();
+    bump($('moves'));
+    if (!wasDoneA && tiles[a] === a) snapPos = a;
+    else if (!wasDoneB && tiles[b] === b) snapPos = b;
+    if (snapPos >= 0){ sfxSnap(); buzz('snap'); } else { sfxSwap(); buzz('swap'); }
+    render();
+    if (isSolved(tiles)) win();
+  }
+
+  // ---------- таймер и счётчики ----------
+  function startTimer(){
+    stopTimer();
+    timerId = setInterval(function(){
+      elapsed++;
+      $('timer').textContent = fmtTime(elapsed);
+    }, 1000);
+  }
+  function stopTimer(){ if (timerId){ clearInterval(timerId); timerId = null; } }
+
+  function fmtTime(s){
+    var m = Math.floor(s / 60), ss = s % 60;
+    return m + ':' + (ss < 10 ? '0' : '') + ss;
+  }
+  function plural(nn, one, few, many){
+    var m10 = nn % 10, m100 = nn % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
+  }
+  function bump(el){
+    el.classList.remove('bump');
+    void el.offsetWidth;   // перезапуск анимации
+    el.classList.add('bump');
+  }
+  function correctCount(){
+    var c = 0;
+    for (var i = 0; i < slotEls.length; i++){
+      var el = slotEls[i].firstChild;
+      if (el && parseInt(el.dataset.idx, 10) === i) c++;
+    }
+    return c;
+  }
+  function updateHud(){
+    if (mode === 'puzzle'){
+      $('moves').textContent = correctCount() + ' из ' + ptotal;
+    } else {
+      $('moves').textContent = moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    }
+    $('timer').textContent = fmtTime(elapsed);
+  }
+
+  // ---------- подсказка (удержание) ----------
+  function peek(on){
+    if (mode === 'puzzle'){ $('peekImg').style.opacity = on ? '0.9' : '0'; }
+    else { $('board').style.opacity = on ? '0.22' : '1'; }
+  }
+  ['pointerdown','touchstart'].forEach(function(ev){
+    $('peekBtn').addEventListener(ev, function(e){ if (e.cancelable) e.preventDefault(); peek(true); });
+  });
+  ['pointerup','pointerleave','pointercancel','touchend','touchcancel'].forEach(function(ev){
+    $('peekBtn').addEventListener(ev, function(){ peek(false); });
+  });
+
+  // ---------- режим «Пазл»: кусочки перетаскиваются на поле ----------
+  function layoutFor(count){
+    if (count <= 12) return {rows:3, cols:4};
+    if (count <= 24) return {rows:4, cols:6};
+    return {rows:6, cols:8};
+  }
+
+  // ---------- фигурные кусочки, как у настоящего пазла ----------
+  var TAB_PTS = [[0.00,0.00],[0.32,0.00],[0.36,0.05],[0.38,0.18],[0.50,0.20],
+                 [0.62,0.18],[0.64,0.05],[0.68,0.00],[1.00,0.00]];
+
+  function makeEdges(){
+    edgesV = []; edgesH = [];
+    var r, c;
+    for (r = 0; r < prows; r++){
+      edgesV[r] = []; edgesH[r] = [];
+      for (c = 0; c < pcols; c++){ edgesV[r][c] = 0; edgesH[r][c] = 0; }
+    }
+    for (r = 0; r < prows; r++)
+      for (c = 0; c < pcols - 1; c++)
+        edgesV[r][c] = (Math.random() < 0.5) ? 1 : -1;
+    for (r = 0; r < prows - 1; r++)
+      for (c = 0; c < pcols; c++)
+        edgesH[r][c] = (Math.random() < 0.5) ? 1 : -1;
+  }
+
+  // сторона кусочка: прямая с «замком» посередине
+  function edgePath(ctx, ax, ay, bx, by, ox, oy, sign, W){
+    var pts = [], i;
+    for (i = 0; i < TAB_PTS.length; i++){
+      var u = TAB_PTS[i][0], v = TAB_PTS[i][1];
+      pts.push([ax + (bx - ax) * u + ox * v * W * sign,
+                ay + (by - ay) * u + oy * v * W * sign]);
+    }
+    var ext = [pts[0]].concat(pts, [pts[pts.length - 1]]);
+    ctx.lineTo(pts[0][0], pts[0][1]);
+    for (i = 1; i < ext.length - 2; i++){
+      var p0 = ext[i - 1], p1 = ext[i], p2 = ext[i + 1], p3 = ext[i + 2];
+      ctx.bezierCurveTo(
+        p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6,
+        p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6,
+        p2[0], p2[1]);
+    }
+  }
+
+  function piecePath(ctx, r, c, W, pad){
+    var x0 = pad, y0 = pad;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    if (r === 0) ctx.lineTo(x0 + W, y0);
+    else edgePath(ctx, x0, y0, x0 + W, y0, 0, -1, -edgesH[r - 1][c], W);
+    if (c === pcols - 1) ctx.lineTo(x0 + W, y0 + W);
+    else edgePath(ctx, x0 + W, y0, x0 + W, y0 + W, 1, 0, edgesV[r][c], W);
+    if (r === prows - 1) ctx.lineTo(x0, y0 + W);
+    else edgePath(ctx, x0 + W, y0 + W, x0, y0 + W, 0, 1, edgesH[r][c], W);
+    if (c === 0) ctx.lineTo(x0, y0);
+    else edgePath(ctx, x0, y0 + W, x0, y0, -1, 0, -edgesV[r][c - 1], W);
+    ctx.closePath();
+  }
+
+  // режем картинку на фигурные кусочки: у каждого свой прозрачный PNG
+  function pieceImage(r, c){
+    var CW = 176;                     // сторона клетки на картинке
+    var pad = CW * PADR;
+    var cv = document.createElement('canvas');
+    cv.width = cv.height = Math.round(CW + 2 * pad);
+    var ctx = cv.getContext('2d');
+    piecePath(ctx, r, c, CW, pad);
+    ctx.save();
+    ctx.clip();
+    ctx.drawImage(srcImg, -c * CW + pad, -r * CW + pad, CW * pcols, CW * prows);
+    ctx.restore();
+    return cv.toDataURL('image/png');
+  }
+
+  function resetPuzzle(){
+    moves = 0; sel = -1; elapsed = 0; finished = false;
+    $('win').classList.remove('show');
+    ptotal = psize;
+    var lay = layoutFor(ptotal);
+    prows = lay.rows; pcols = lay.cols;
+    makeEdges();
+
+    $('board').style.display = 'none';
+    $('puzzleBoard').classList.add('on');
+    $('tray').classList.add('on');
+    $('peekImg').style.opacity = '0';   // образец скрыт: собираем по кусочкам, а не по подсказке
+
+    buildSlots();
+    updateHud();
+    audioUnlock();
+    sfxShuffle();
+
+    // режем картинку на фигурные кусочки, когда она загрузилась
+    pieceURLs = [];
+    $('tray').innerHTML = '';
+    var im = new Image();
+    im.onload = function(){
+      srcImg = im;
+      pieceURLs = [];
+      for (var i = 0; i < ptotal; i++){
+        pieceURLs.push(pieceImage(Math.floor(i / pcols), i % pcols));
+      }
+      buildTray();
+      startTimer();
+    };
+    im.onerror = function(){ startTimer(); };
+    im.src = sourceURL;
+  }
+
+  function buildSlots(){
+    var pb = $('puzzleBoard');
+    pb.style.gridTemplateColumns = 'repeat(' + pcols + ', 1fr)';
+    pb.style.gridTemplateRows = 'repeat(' + prows + ', 1fr)';
+    pb.innerHTML = '';
+    slotEls = [];
+    for (var i = 0; i < prows * pcols; i++){
+      var s = document.createElement('div');
+      s.className = 'slot';
+      s.dataset.slot = i;
+      pb.appendChild(s);
+      slotEls.push(s);
+    }
+  }
+
+  // слот занят ровно тогда, когда в нём лежит кусочек:
+  // так «пустая, но помеченная» клетка не остаётся после чужих ходов
+  function syncSlots(){
+    for (var i = 0; i < slotEls.length; i++){
+      slotEls[i].classList.toggle('done', !!slotEls[i].firstChild);
+    }
+  }
+
+  // подбираем размер кусочка так, чтобы все поместились в лоток без прокрутки
+  function trayPieceSize(total){
+    var tray = $('tray');
+    var W = tray.clientWidth || 320;
+    var H = tray.clientHeight || 200;
+    var gap = 7, n = total || ptotal || 12, best = 24, w, full, per, rows;
+    for (w = 24; w <= 54; w++){
+      full = w * (1 + 2 * PADR);
+      per = Math.max(1, Math.floor((W - gap * 2) / (full + gap)));
+      rows = Math.ceil(n / per);
+      if (rows * (full + gap) <= H + 6) best = w;
+    }
+    return best;
+  }
+
+  function makePiece(idx, w){
+    var p = document.createElement('div');
+    p.className = 'piece';
+    p.dataset.idx = idx;
+    var full = Math.round(w * (1 + 2 * PADR));
+    p.style.width = full + 'px';
+    p.style.height = full + 'px';
+    p.style.backgroundImage = 'url(' + pieceURLs[idx] + ')';
+    p.addEventListener('pointerdown', pieceDown);
+    return p;
+  }
+
+  function buildTray(){
+    var tray = $('tray');
+    tray.innerHTML = '';
+    var size = trayPieceSize(ptotal);
+    var order = [], i, j, t;
+    for (i = 0; i < ptotal; i++) order.push(i);
+    for (i = order.length - 1; i > 0; i--){
+      j = Math.floor(Math.random() * (i + 1));
+      t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    for (i = 0; i < order.length; i++) tray.appendChild(makePiece(order[i], size));
+  }
+
+  // ---------- перетаскивание кусочков ----------
+  function pieceDown(e){
+    if (finished || dragEl) return;
+    e.preventDefault();
+    lockScroll(true);
+    audioUnlock();
+    dragEl = this;
+    dragHome = this.parentNode;
+    var r = this.getBoundingClientRect();
+    dragL = r.left; dragT = r.top;
+    dragX0 = e.clientX; dragY0 = e.clientY;
+    if (dragHome && dragHome.classList && dragHome.classList.contains('slot')){
+      dragHome.classList.remove('done');
+    }
+    this.classList.add('drag');
+    this.style.width = r.width + 'px';
+    this.style.height = r.height + 'px';
+    this.style.left = dragL + 'px';
+    this.style.top = dragT + 'px';
+    document.body.appendChild(this);
+    highlightSlot();
+    sfxPick(); buzz('pick');
+    document.addEventListener('pointermove', pieceMove);
+    document.addEventListener('pointerup', pieceUp);
+    document.addEventListener('pointercancel', pieceUp);
+  }
+
+  function pieceMove(e){
+    if (!dragEl) return;
+    e.preventDefault();
+    dragL += e.clientX - dragX0;
+    dragT += e.clientY - dragY0;
+    dragX0 = e.clientX; dragY0 = e.clientY;
+    dragEl.style.left = dragL + 'px';
+    dragEl.style.top = dragT + 'px';
+    highlightSlot();
+  }
+
+  // ближайший свободный слот к центру кусочка (с допуском)
+  function nearestSlot(){
+    if (!dragEl) return null;
+    var r = dragEl.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var best = null, bestD = 1e9, i, b, dx, dy, d;
+    for (i = 0; i < slotEls.length; i++){
+      if (slotEls[i].firstChild) continue;
+      b = slotEls[i].getBoundingClientRect();
+      dx = (b.left + b.width / 2) - cx;
+      dy = (b.top + b.height / 2) - cy;
+      d = Math.sqrt(dx * dx + dy * dy);
+      if (d < bestD){ bestD = d; best = slotEls[i]; }
+    }
+    if (!best) return null;
+    b = best.getBoundingClientRect();
+    var near = Math.max(b.width, b.height) * 0.7;
+    return (bestD <= near) ? best : null;
+  }
+
+  function highlightSlot(){
+    var s = nearestSlot();
+    if (s === hotSlot) return;
+    if (hotSlot) hotSlot.classList.remove('hot');
+    hotSlot = s;
+    if (hotSlot) hotSlot.classList.add('hot');
+  }
+
+  function pieceUp(){
+    if (!dragEl) return;
+    lockScroll(false);
+    document.removeEventListener('pointermove', pieceMove);
+    document.removeEventListener('pointerup', pieceUp);
+    document.removeEventListener('pointercancel', pieceUp);
+    var el = dragEl;
+    var target = nearestSlot();
+    if (hotSlot){ hotSlot.classList.remove('hot'); hotSlot = null; }
+    dragEl = null;
+    if (target) placePiece(el, target);
+    else sendBack(el);
+  }
+
+  function sendBack(el){
+    var size = Math.round(trayPieceSize(ptotal) * (1 + 2 * PADR));
+    el.classList.remove('drag');
+    el.style.left = ''; el.style.top = '';
+    el.style.width = size + 'px';
+    el.style.height = size + 'px';
+    $('tray').appendChild(el);
+    syncSlots();
+    if (net.on && !net.applying) netSend({type: 'move', idx: parseInt(el.dataset.idx, 10), slot: -1});
+    sfxSwap(); buzz('swap');
+  }
+
+  function placePiece(el, slot){
+    var idx = parseInt(el.dataset.idx, 10);
+    var right = (String(slot.dataset.slot) === String(idx));
+    el.classList.remove('drag');
+    el.style.left = ''; el.style.top = '';
+    el.style.width = ''; el.style.height = '';
+    slot.appendChild(el);
+    syncSlots();
+    if (right){
+      sfxSnap(); buzz('snap');
+      el.classList.remove('snap');
+      void el.offsetWidth;
+      el.classList.add('snap');
+    } else {
+      sfxSwap(); buzz('swap');
+    }
+    if (net.on && !net.applying) netSend({type: 'move', idx: idx, slot: parseInt(slot.dataset.slot, 10)});
+    updateHud();
+    if (correctCount() >= ptotal) win();
+  }
+
+  // ---------- «Мои пазлы»: что начал и что собрал ----------
+  var myTab = 'progress';
+  var MY_TITLES = {
+    'pazl-01-zakat.png': 'Закат',
+    'pazl-02-gory.png': 'Горы',
+    'pazl-03-shary.png': 'Шары',
+    'pazl-04-cvety.png': 'Цветы',
+    'pazl-05-more.png': 'Море',
+    'pazl-06-gorod.png': 'Ночной город',
+    'pazl-07-raduga.png': 'Радуга',
+    'pazl-08-kosmos.png': 'Космос'
+  };
+  function myTitle(name){
+    if (MY_TITLES[name]) return MY_TITLES[name];
+    if (!name || name === 'без картинки') return 'Своя картинка';
+    if (name.indexOf('своё фото') === 0 || name === 'своё фото') return 'Своё фото';
+    if (name === 'по описанию') return 'По описанию';
+    return name.replace(/\.png$/, '').replace(/^pazl-\d+-/, '');
+  }
+  function myDay(iso){
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var t = new Date();
+    var same = function(a, b){ return a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); };
+    if (same(d, t)) return 'сегодня';
+    var y = new Date(t.getTime() - 86400000);
+    if (same(d, y)) return 'вчера';
+    return (d.getDate() < 10 ? '0' : '') + d.getDate() + '.'
+      + ((d.getMonth() + 1) < 10 ? '0' : '') + (d.getMonth() + 1);
+  }
+  document.querySelectorAll('[data-mytab]').forEach(function(t){
+    t.addEventListener('click', function(){
+      document.querySelectorAll('[data-mytab]').forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      myTab = t.dataset.mytab;
+      try { loadMy(); } catch(e){}
+    });
+  });
+  function loadMy(){
+    var grid = $('myGrid');
+    if (!tgId){
+      grid.innerHTML = '<p class="myempty">Открой игру из Telegram — тогда собранное сохранится.</p>';
+      return;
+    }
+    grid.innerHTML = '<p class="myempty">Загружаю…</p>';
+    fetch('/api/my?tg_id=' + encodeURIComponent(tgId))
+      .then(function(r){ if (!r.ok) throw new Error('нет'); return r.json(); })
+      .then(function(d){
+        if (!d || !d.ok){
+          grid.innerHTML = '<p class="myempty">Галерея пока недоступна. Загляни позже.</p>';
+          return;
+        }
+        var items = (d.items || []).filter(function(x){
+          // старые записи без превью («без картинки») в галерее не показываем
+          return x.thumb || (x.picture || '') !== 'без картинки';
+        });
+        var done = [], prog = [];
+        items.forEach(function(x){ (x.done ? done : prog).push(x); });
+        $('myCntP').textContent = prog.length;
+        $('myCntD').textContent = done.length;
+        renderMy(myTab === 'done' ? done : prog);
+      })
+      .catch(function(){
+        grid.innerHTML = '<p class="myempty">Сервер не ответил. Попробуй ещё раз.</p>';
+      });
+  }
+  function renderMy(items){
+    var grid = $('myGrid');
+    if (!items.length){
+      grid.innerHTML = '<p class="myempty">' + (myTab === 'done'
+        ? 'Здесь появятся собранные пазлы.'
+        : 'Начни собирать картинку и выйди из игры — прогресс появится здесь.') + '</p>';
+      return;
+    }
+    grid.innerHTML = '';
+    items.forEach(function(it){
+      var name = it.picture || '';
+      var isReady = READY.indexOf(name) >= 0;
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'mycard';
+
+      var thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      if (it.thumb || isReady){
+        var im = document.createElement('img');
+        im.loading = 'lazy';
+        im.alt = myTitle(name);
+        im.src = it.thumb || ('/' + name);
+        if (!it.done) im.className = 'gray';
+        thumb.appendChild(im);
+      } else {
+        thumb.textContent = '🖼';
+      }
+
+      var b = document.createElement('span');
+      if (it.done){ b.className = 'badge done'; b.textContent = '✓'; }
+      else { b.className = 'badge pct'; b.textContent = (it.best_pct || 0) + '%'; }
+      thumb.appendChild(b);
+      if (!it.done && myDay(it.updated_at) === 'сегодня'){
+        var nw = document.createElement('span');
+        nw.className = 'badge new';
+        nw.textContent = 'New';
+        thumb.appendChild(nw);
+      }
+      card.appendChild(thumb);
+
+      var tt = document.createElement('div');
+      tt.className = 'ttl';
+      tt.textContent = myTitle(name);
+      card.appendChild(tt);
+
+      var ds = document.createElement('div');
+      ds.className = 'ds';
+      ds.textContent = it.done
+        ? ('собран ' + myDay(it.updated_at))
+        : ((it.best_pct || 0) + '% · ' + (myDay(it.updated_at) || 'начат'));
+      card.appendChild(ds);
+
+      if (isReady){
+        card.addEventListener('click', function(){
+          acceptImage('/' + name, 'Выбрана картинка: ' + myTitle(name), name);
+          sfxPick();
+          show('setup');
+        });
+      }
+      grid.appendChild(card);
+    });
+  }
+
+  // ---------- прогресс: чтобы в «Моих» был процент ----------
+  // имя карточки в галерее: у готовых — имя файла, у своих — своё
+  function pictureKey(){
+    if (pictureName) return pictureName;
+    if (pictureKind === 'prompt') return 'по описанию';
+    var s = sourceURL || '';
+    var h = 7;
+    for (var i = 0; i < s.length; i += 61){ h = (h * 31 + s.charCodeAt(i)) | 0; }
+    return 'своё фото ' + (h >>> 0).toString(36).slice(0, 4).toUpperCase();
+  }
+  // маленькое превью (256 точек) — чтобы в «Моих» была видна сама картинка
+  function thumbData(){
+    try {
+      var img = srcImg || $('preview');
+      if (!img || !img.naturalWidth) return '';
+      var c = document.createElement('canvas');
+      c.width = c.height = 256;
+      var x = c.getContext('2d');
+      var iw = img.naturalWidth, ih = img.naturalHeight;
+      var k = Math.max(256 / iw, 256 / ih);
+      var w = iw * k, h = ih * k;
+      x.imageSmoothingEnabled = true;
+      x.imageSmoothingQuality = 'high';
+      x.drawImage(img, (256 - w) / 2, (256 - h) / 2, w, h);
+      var s = c.toDataURL('image/jpeg', 0.7);
+      return (s.length <= 120000) ? s : '';
+    } catch(e){ return ''; }
+  }
+  function progressPct(){
+    if (mode === 'puzzle'){
+      return ptotal ? Math.round(correctCount() * 100 / ptotal) : 0;
+    }
+    var ok = 0;
+    for (var i = 0; i < tiles.length; i++){ if (tiles[i] === i) ok++; }
+    return tiles.length ? Math.round(ok * 100 / tiles.length) : 0;
+  }
+  function reportProgress(){
+    if (!tgId || finished || !sourceURL) return;
+    var pct = progressPct();
+    if (pct <= 0 || pct >= 100) return;
+    fetch('/api/report', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({time: elapsed, mode: mode, total: ptotal, name: tgName,
+                            tg_id: tgId, picture: pictureKey(), thumb: thumbData(),
+                            pct: pct, done: false})
+    }).catch(function(){});
+  }
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden){ try { reportProgress(); } catch(e){} }
+  });
+
+  // ---------- победа ----------
+  function confetti(){
+    var emo = ['🎉','✨','⭐','🎊','💫'];
+    for (var i = 0; i < 16; i++){
+      var s = document.createElement('div');
+      s.className = 'confetti';
+      s.textContent = emo[i % emo.length];
+      s.style.left = (Math.random() * 92) + '%';
+      s.style.animationDuration = (1.6 + Math.random() * 1.5) + 's';
+      s.style.animationDelay = (Math.random() * 0.6) + 's';
+      s.style.fontSize = (16 + Math.random() * 14).toFixed(0) + 'px';
+      document.body.appendChild(s);
+      (function(el){
+        setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 4500);
+      })(s);
+    }
+  }
+
+  function win(){
+    finished = true;
+    stopTimer();
+    if (mode === 'puzzle'){
+      $('winStats').textContent = 'Время: ' + fmtTime(elapsed) + ' · ' + ptotal + ' кусочков';
+    } else {
+      $('winStats').textContent =
+        'Время: ' + fmtTime(elapsed) + ' · ' + moves + ' ' + plural(moves, 'ход', 'хода', 'ходов');
+    }
+    setTimeout(function(){ $('win').classList.add('show'); }, 2000);
+    sfxWin(); buzz('win'); confetti();
+    try {
+      var u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
+      var nm = u ? (u.first_name || u.username || '') : '';
+      fetch('/api/report', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({time: elapsed, mode: mode, total: ptotal, name: nm,
+                              tg_id: tgId, picture: pictureKey(), thumb: thumbData(),
+                              pct: 100, done: true})
+      }).catch(function(){});
+      if (dailyMode && tgId){
+        fetch('/api/daily/result', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({tg_id: tgId, name: nm, seconds: elapsed})
+        }).then(function(r){ return r.json(); }).then(function(d){
+          var note = '';
+          if (d && d.ok && d.counted === false) note = ' · в зачёт не пошло: слишком быстро';
+          else if (d && d.ok && d.my_place) note = ' · твоё место в дне: ' + d.my_place;
+          else if (d && d.reason) note = ' · рейтинг ещё выключен';
+          if (note) $('winStats').textContent += note;
+        }).catch(function(){});
+      }
+    } catch(e){}
+    if (tg && tg.BackButton) { try { tg.BackButton.hide(); } catch(e){} }
+  }
+})();
+</script>
+</body>
+</html>
