@@ -1,0 +1,5 @@
+aiogram==3.31.0
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+httpx
+asyncpg==0.32.0
